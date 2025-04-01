@@ -1,0 +1,1740 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>The Cursed Traveler's Journey</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.9.0/p5.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.9.0/addons/p5.sound.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        html, body {
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            background-color: #000;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            touch-action: none;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+        
+        #orientation-message {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.9);
+            color: white;
+            text-align: center;
+            padding-top: 40vh;
+            z-index: 1000;
+            font-size: 24px;
+        }
+
+        #game-container {
+            position: relative;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        canvas {
+            display: block;
+            box-shadow: 0 0 30px rgba(120, 180, 240, 0.3);
+        }
+
+        @media (orientation: portrait) and (max-width: 768px) {
+            #orientation-message {
+                display: block;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div id="orientation-message">
+        Please rotate your device to play in landscape mode<br>
+        <div style="margin-top: 20px; font-size: 48px;">↻</div>
+    </div>
+    <div id="game-container">
+        <!-- Canvas will be created here by p5.js -->
+    </div>
+
+    <script>
+    // Game Configuration
+    const Config = {
+        // Core Game Settings
+        aspectRatio: 16/9,
+        playerSize: 40,
+        playerDistanceFromCenter: 120,
+        spiritGuideSize: 18,
+        
+        // Controls
+        tapRotationAmount: 8,  // Increased for better responsiveness
+        holdBaseSpeed: 2.0,    // Increased base rotation speed
+        holdAccelerationFactor: 0.0001,
+        holdExponent: 2.0,
+        maxHoldSpeed: 18,      // Higher max speed
+        
+        // Difficulty Progression
+        initialWallSpeed: 1.6,  // 30% faster than original
+        wallSpeedIncreaseFactor: 0.0008,
+        initialSpawnInterval: 160, // Slightly faster spawn
+        spawnIntervalDecreaseFactor: 0.997,
+        minSpawnInterval: 35,
+        initialGapSizeDeg: 72,
+        gapSizeDecreaseFactor: 0.999,
+        minGapSizeDeg: 28,
+        
+        // Spirit Guides (replaces the center shape)
+        spiritGuidesCount: 5,
+        spiritGuideOrbitSpeed: 0.4,
+        spiritGuideDistanceMin: 40,
+        spiritGuideDistanceMax: 200,
+        
+        // Particles
+        maxParticles: 60,
+        particleLifespan: 120,
+        
+        // Visual Elements
+        backgroundLayers: 3,
+        forestElements: 80,
+        cloudElements: 12,
+        
+        // Story Elements
+        storyPhrases: [
+            "Find the path forward...",
+            "The walls always find you...",
+            "Keep moving...",
+            "Don't lose hope...",
+            "Escape is possible...",
+            "The curse follows...",
+            "Trust the spirits...",
+            "Light guides the way..."
+        ],
+        
+        // Audio (placeholder for future enhancement)
+        backgroundMusicVolume: 0.4,
+        soundEffectsVolume: 0.6,
+        
+        // Color Themes - Ghibli Inspired
+        colorThemes: [
+            // Calm Forest Theme (inspired by Totoro)
+            {
+                name: "Forest Sanctuary",
+                bg: [120, 180, 120],
+                bgGradient: [100, 160, 100],
+                player: [255, 250, 240],
+                barriers: [60, 80, 40, 180],
+                spirits: [240, 250, 200],
+                particles: [220, 255, 200],
+                forest: [40, 90, 40],
+                clouds: [250, 250, 255, 160]
+            },
+            // Spirit World Theme (inspired by Spirited Away)
+            {
+                name: "Spirit Realm",
+                bg: [70, 80, 140],
+                bgGradient: [40, 50, 100],
+                player: [250, 240, 255],
+                barriers: [20, 30, 80, 180],
+                spirits: [200, 240, 255],
+                particles: [180, 220, 255],
+                forest: [30, 40, 80],
+                clouds: [180, 200, 255, 140]
+            },
+            // Castle in the Sky Theme
+            {
+                name: "Floating Island",
+                bg: [180, 210, 255],
+                bgGradient: [130, 180, 230],
+                player: [255, 255, 240],
+                barriers: [100, 130, 180, 180],
+                spirits: [255, 255, 200],
+                particles: [255, 250, 220],
+                forest: [80, 120, 160],
+                clouds: [255, 255, 255, 180]
+            },
+            // Mononoke Forest Theme
+            {
+                name: "Ancient Forest",
+                bg: [80, 120, 80],
+                bgGradient: [50, 70, 50],
+                player: [240, 255, 240],
+                barriers: [40, 60, 30, 180],
+                spirits: [180, 255, 180],
+                particles: [200, 255, 150],
+                forest: [30, 60, 30],
+                clouds: [230, 255, 230, 130]
+            },
+            // Sunset Theme (inspired by Howl's Moving Castle)
+            {
+                name: "Sunset Journey",
+                bg: [230, 180, 100],
+                bgGradient: [180, 100, 80],
+                player: [255, 255, 240],
+                barriers: [160, 80, 40, 180],
+                spirits: [255, 220, 150],
+                particles: [255, 200, 120],
+                forest: [100, 60, 30],
+                clouds: [255, 220, 200, 150]
+            }
+        ]
+    };
+
+    // Game State
+    let gameState = 'intro'; // intro, story, playing, gameOver
+    let storyPage = 0;
+    let storyFadeIn = 0;
+    let score = 0;
+    let startTime = 0;
+    let sessionHighScore = 0;
+    let lifetimeHighScore = 0;
+    let currentTheme = 0;
+    let targetTheme = 0;
+    let themeBlendFactor = 1;
+
+    // Player State
+    let playerAngle = 0;
+    let playerTargetAngle = 0;
+    let playerRotationSpeed = 0;
+    let playerTrail = [];
+    
+    // Environment Elements
+    let forestElements = [];
+    let cloudElements = [];
+    let spiritGuides = [];
+    let particles = [];
+    let barriers = [];
+    let destinations = [];
+    let backgroundLayers = [];
+    
+    // Display metrics
+    let canvasWidth, canvasHeight;
+    let gameScaleFactor;
+    let gameOffsetX, gameOffsetY;
+    
+    // Input Tracking
+    let keys = { left: false, right: false };
+    let touch = { left: false, right: false };
+    let holdStartTime = { left: null, right: null };
+    
+    // Assets
+    let images = {};
+    let sounds = {};
+    let storyDisplayTime = 0;
+    let storyTextOpacity = 0;
+    let currentStoryPhrase = "";
+    
+    // Preload assets
+    function preload() {
+        // This would be where we'd load images and sounds
+        // For now, we'll create them procedurally
+    }
+    
+    // Setup function
+    function setup() {
+        // Create canvas with 16:9 aspect ratio that fits within the window
+        setupCanvas();
+        
+        // Set drawing modes
+        angleMode(DEGREES);
+        rectMode(CENTER);
+        textAlign(CENTER, CENTER);
+        colorMode(RGB);
+        
+        // Load high scores from localStorage
+        loadHighScores();
+        
+        // Initialize game elements
+        initializeGame();
+        
+        // Set frame rate
+        frameRate(60);
+    }
+    
+    function setupCanvas() {
+        let containerWidth = windowWidth;
+        let containerHeight = windowHeight;
+        
+        // Calculate canvas size to maintain 16:9 ratio within the container
+        if (containerWidth / containerHeight > Config.aspectRatio) {
+            // Container is wider than 16:9
+            canvasHeight = containerHeight;
+            canvasWidth = containerHeight * Config.aspectRatio;
+        } else {
+            // Container is taller than 16:9
+            canvasWidth = containerWidth;
+            canvasHeight = containerWidth / Config.aspectRatio;
+        }
+        
+        // Create the canvas
+        createCanvas(canvasWidth, canvasHeight);
+        
+        // Calculate scale factor for responsive sizing
+        gameScaleFactor = min(canvasWidth / 1920, canvasHeight / 1080);
+        
+        // Center offset
+        gameOffsetX = canvasWidth / 2;
+        gameOffsetY = canvasHeight / 2;
+    }
+    
+    function initializeGame() {
+        // Initialize background layers
+        createBackgroundLayers();
+        
+        // Create forest elements
+        createForestElements();
+        
+        // Create cloud elements
+        createCloudElements();
+        
+        // Create spirit guides
+        createSpiritGuides();
+        
+        // Reset player state
+        resetPlayer();
+        
+        // Initialize empty arrays
+        barriers = [];
+        particles = [];
+        playerTrail = [];
+        destinations = [];
+        
+        // Start with the first theme
+        currentTheme = 0;
+        targetTheme = 0;
+        themeBlendFactor = 1;
+        
+        // Reset game state
+        score = 0;
+        startTime = millis();
+    }
+    
+    function resetPlayer() {
+        playerAngle = 0;
+        playerTargetAngle = 0;
+        playerRotationSpeed = 0;
+    }
+    
+    function createBackgroundLayers() {
+        backgroundLayers = [];
+        for (let i = 0; i < Config.backgroundLayers; i++) {
+            // Create background layers with various depths
+            backgroundLayers.push({
+                depth: 0.2 + (i * 0.3),  // 0.2, 0.5, 0.8, etc.
+                offset: random(360),
+                speed: 0.05 + (i * 0.03)
+            });
+        }
+    }
+    
+    function createForestElements() {
+        forestElements = [];
+        for (let i = 0; i < Config.forestElements; i++) {
+            forestElements.push({
+                x: random(-canvasWidth, canvasWidth * 2),
+                y: random(-canvasHeight, canvasHeight * 2),
+                size: random(20, 100) * gameScaleFactor,
+                type: floor(random(3)),  // Different tree types
+                depth: random(0.3, 1.0), // Depth for parallax
+                swayAmount: random(1, 3),
+                swaySpeed: random(0.5, 1.5),
+                swayOffset: random(360)
+            });
+        }
+    }
+    
+    function createCloudElements() {
+        cloudElements = [];
+        for (let i = 0; i < Config.cloudElements; i++) {
+            cloudElements.push({
+                x: random(-canvasWidth, canvasWidth * 2),
+                y: random(-canvasHeight/2, canvasHeight/2),
+                width: random(200, 400) * gameScaleFactor,
+                height: random(50, 150) * gameScaleFactor,
+                speed: random(0.1, 0.3),
+                depth: random(0.1, 0.4)  // Clouds are always in background
+            });
+        }
+    }
+    
+    function createSpiritGuides() {
+        spiritGuides = [];
+        for (let i = 0; i < Config.spiritGuidesCount; i++) {
+            spiritGuides.push({
+                angle: random(360),
+                distance: random(Config.spiritGuideDistanceMin, Config.spiritGuideDistanceMax),
+                size: random(Config.spiritGuideSize * 0.7, Config.spiritGuideSize * 1.3),
+                speed: random(0.5, 1.5) * Config.spiritGuideOrbitSpeed,
+                pulseSpeed: random(1, 3),
+                phaseOffset: random(360)
+            });
+        }
+    }
+    
+    // Main draw loop
+    function draw() {
+        // Handle camera movement based on player angle
+        let cameraAngle = -playerAngle;
+        
+        // Update game state
+        if (gameState === 'intro') {
+            drawIntroScreen();
+        } else if (gameState === 'story') {
+            drawStoryScreen();
+        } else if (gameState === 'playing') {
+            updatePlaying();
+            
+            // Draw world
+            push();
+            translate(gameOffsetX, gameOffsetY);
+            rotate(cameraAngle);
+            
+            drawBackground();
+            drawForestElements();
+            updateAndDrawParticles();
+            drawBarriers();
+            drawSpiritGuides();
+            drawDestinations();
+            
+            // Draw player
+            drawPlayer();
+            
+            pop();
+            
+            // HUD elements (not affected by camera rotation)
+            drawHUD();
+            drawStoryHints();
+            
+            // Check for collisions
+            checkCollisions();
+            
+        } else if (gameState === 'gameOver') {
+            // Draw the world one last time (frozen)
+            push();
+            translate(gameOffsetX, gameOffsetY);
+            rotate(cameraAngle);
+            
+            drawBackground();
+            drawForestElements();
+            updateAndDrawParticles();
+            drawBarriers();
+            drawSpiritGuides();
+            drawDestinations();
+            
+            // Draw player
+            drawPlayer();
+            
+            pop();
+            
+            // Draw game over screen
+            drawGameOverScreen();
+        }
+    }
+    
+    function updatePlaying() {
+        // Update score
+        let elapsedTimeSeconds = (millis() - startTime) / 1000;
+        score = elapsedTimeSeconds;
+        
+        // Update difficulty based on score
+        updateDifficulty();
+        
+        // Update player position
+        updatePlayer();
+        
+        // Update environment
+        updateEnvironment();
+        
+        // Spawn new barriers
+        if (frameCount % floor(currentDifficulty.spawnInterval) === 0) {
+            spawnBarriers();
+        }
+        
+        // Spawn destination when appropriate
+        if (random() < 0.001 && destinations.length === 0) {
+            spawnDestination();
+        }
+        
+        // Update destinations
+        updateDestinations();
+        
+        // Update barriers
+        updateBarriers();
+        
+        // Check for theme changes
+        checkForThemeChange();
+    }
+    
+    // Current difficulty settings
+    let currentDifficulty = {
+        wallSpeed: Config.initialWallSpeed,
+        spawnInterval: Config.initialSpawnInterval,
+        gapSize: Config.initialGapSizeDeg
+    };
+    
+    function updateDifficulty() {
+        let elapsedTimeSeconds = score;
+        
+        // Increase barrier speed
+        currentDifficulty.wallSpeed = Config.initialWallSpeed + 
+                                      elapsedTimeSeconds * Config.wallSpeedIncreaseFactor;
+        
+        // Decrease spawn interval
+        currentDifficulty.spawnInterval = max(Config.minSpawnInterval, 
+                                           Config.initialSpawnInterval * 
+                                           pow(Config.spawnIntervalDecreaseFactor, elapsedTimeSeconds));
+        
+        // Decrease gap size
+        currentDifficulty.gapSize = max(Config.minGapSizeDeg, 
+                                      Config.initialGapSizeDeg * 
+                                      pow(Config.gapSizeDecreaseFactor, elapsedTimeSeconds));
+    }
+    
+    function updatePlayer() {
+        // Handle input and calculate rotation
+        handleInput();
+        
+        // Smooth rotation towards target angle
+        if (abs(playerAngle - playerTargetAngle) > 0.1) {
+            playerAngle = lerp(playerAngle, playerTargetAngle, 0.4); // More responsive
+        }
+        
+        // Apply rotation speed from holding keys/touch
+        playerAngle += playerRotationSpeed;
+        
+        // Keep angle in 0-360 range
+        playerAngle = (playerAngle + 360) % 360;
+        
+        // Sync target with current when actively rotating
+        if (playerRotationSpeed !== 0) {
+            playerTargetAngle = playerAngle;
+        }
+        
+        // Update player trail
+        updatePlayerTrail();
+    }
+    
+    function updatePlayerTrail() {
+        // Add new trail point
+        playerTrail.push({
+            angle: playerAngle,
+            distance: Config.playerDistanceFromCenter,
+            alpha: 255,
+            size: Config.playerSize * 0.4
+        });
+        
+        // Remove old points
+        if (playerTrail.length > 12) {
+            playerTrail.shift();
+        }
+        
+        // Fade out trail points
+        for (let i = 0; i < playerTrail.length; i++) {
+            playerTrail[i].alpha -= 255 / 12;
+            playerTrail[i].size *= 0.92;
+        }
+    }
+    
+    function updateEnvironment() {
+        // Move clouds
+        for (let cloud of cloudElements) {
+            cloud.x += cloud.speed;
+            if (cloud.x > canvasWidth * 1.5) {
+                cloud.x = -canvasWidth / 2;
+                cloud.y = random(-canvasHeight/2, canvasHeight/2);
+            }
+        }
+    }
+    
+    function spawnBarriers() {
+        // Calculate starting distance (outside visible area)
+        let spawnDistance = max(canvasWidth, canvasHeight) * 1.2;
+        
+        // Number of barrier segments around the circle
+        let numSegments = 8;
+        let segmentAngle = 360 / numSegments;
+        
+        // Choose a safe segment for the gap
+        let safeSegment = floor(random(numSegments));
+        
+        // Create barrier segments
+        for (let i = 0; i < numSegments; i++) {
+            // Skip the safe segment
+            if (i === safeSegment) continue;
+            
+            let startAngle = i * segmentAngle;
+            let endAngle = (i + 1) * segmentAngle;
+            
+            // Create the barrier
+            barriers.push({
+                startAngle: startAngle,
+                endAngle: endAngle,
+                distance: spawnDistance,
+                thickness: 40 * gameScaleFactor,
+                alpha: 0, // Start transparent and fade in
+                safePassage: false
+            });
+        }
+        
+        // Add hint particles in the safe passage
+        let safeAngle = safeSegment * segmentAngle + segmentAngle / 2;
+        for (let i = 0; i < 5; i++) {
+            addSafePassageParticle(safeAngle, spawnDistance);
+        }
+    }
+    
+    function updateBarriers() {
+        for (let i = barriers.length - 1; i >= 0; i--) {
+            // Move barriers inward
+            barriers[i].distance -= currentDifficulty.wallSpeed * (deltaTime / 16);
+            
+            // Fade in barriers as they enter the screen
+            if (barriers[i].alpha < 255) {
+                barriers[i].alpha += 5;
+            }
+            
+            // Remove barriers that have passed the center
+            if (barriers[i].distance < 10) {
+                barriers.splice(i, 1);
+                continue;
+            }
+            
+            // Check if barrier is approaching player's orbit
+            let distanceToPlayer = abs(barriers[i].distance - Config.playerDistanceFromCenter);
+            if (distanceToPlayer < 50 && distanceToPlayer > 40) {
+                // Add warning particle effect
+                let midAngle = (barriers[i].startAngle + barriers[i].endAngle) / 2;
+                addWarningParticles(midAngle, barriers[i].distance);
+            }
+        }
+    }
+    
+    function spawnDestination() {
+        destinations.push({
+            distance: max(canvasWidth, canvasHeight) * 1.2,
+            radius: 80 * gameScaleFactor,
+            pulseAmount: 0.2,
+            pulseSpeed: 2,
+            alpha: 0
+        });
+    }
+    
+    function updateDestinations() {
+        for (let i = destinations.length - 1; i >= 0; i--) {
+            // Move destination inward
+            destinations[i].distance -= (currentDifficulty.wallSpeed * 0.8) * (deltaTime / 16);
+            
+            // Fade in destination
+            if (destinations[i].distance < max(canvasWidth, canvasHeight) && destinations[i].alpha < 255) {
+                destinations[i].alpha += 2;
+            }
+            
+            // Check if player reached the destination
+            if (destinations[i].distance < Config.playerDistanceFromCenter + 20 && 
+                destinations[i].distance > Config.playerDistanceFromCenter - 20) {
+                
+                // Player reached destination - spawn barriers and remove destination
+                let numBarriers = 12;
+                let barrierAngleSpacing = 360 / numBarriers;
+                
+                for (let j = 0; j < numBarriers; j++) {
+                    let startAngle = j * barrierAngleSpacing;
+                    let endAngle = (j + 1) * barrierAngleSpacing;
+                    
+                    // Skip the segment where the player is
+                    if (playerAngle >= startAngle && playerAngle <= endAngle) continue;
+                    
+                    barriers.push({
+                        startAngle: startAngle,
+                        endAngle: endAngle,
+                        distance: Config.playerDistanceFromCenter + 100,
+                        thickness: 40 * gameScaleFactor,
+                        alpha: 0,
+                        safePassage: false
+                    });
+                }
+                
+                // Add special particles
+                for (let j = 0; j < 30; j++) {
+                    addParticle(
+                        Config.playerDistanceFromCenter * cos(playerAngle),
+                        Config.playerDistanceFromCenter * sin(playerAngle),
+                        random(-2, 2),
+                        random(-2, 2),
+                        random(5, 15),
+                        [255, 255, 200],
+                        random(60, 120)
+                    );
+                }
+                
+                // Remove the destination
+                destinations.splice(i, 1);
+                
+                // Change theme
+                changeTheme();
+            }
+            
+            // Remove destinations that have passed the center
+            if (destinations[i].distance < 10) {
+                destinations.splice(i, 1);
+            }
+        }
+    }
+    
+    function addSafePassageParticle(angle, distance) {
+        let x = distance * cos(angle);
+        let y = distance * sin(angle);
+        
+        addParticle(
+            x, y,
+            random(-1, 1),
+            random(-1, 1),
+            random(8, 15) * gameScaleFactor,
+            [255, 255, 200],
+            random(60, 120)
+        );
+    }
+    
+    function addWarningParticles(angle, distance) {
+        if (random() < 0.3) {
+            let x = distance * cos(angle);
+            let y = distance * sin(angle);
+            
+            addParticle(
+                x, y,
+                random(-0.5, 0.5),
+                random(-0.5, 0.5),
+                random(5, 10) * gameScaleFactor,
+                [255, 100, 50],
+                random(20, 40)
+            );
+        }
+    }
+    
+    function addParticle(x, y, vx, vy, size, color, lifespan) {
+        if (particles.length > Config.maxParticles) {
+            // Remove oldest particle if at limit
+            particles.shift();
+        }
+        
+        particles.push({
+            x: x,
+            y: y,
+            vx: vx,
+            vy: vy,
+            size: size,
+            color: color,
+            lifespan: lifespan,
+            maxLifespan: lifespan
+        });
+    }
+    
+    function updateAndDrawParticles() {
+        for (let i = particles.length - 1; i >= 0; i--) {
+            let p = particles[i];
+            
+            // Update position
+            p.x += p.vx;
+            p.y += p.vy;
+            
+            // Decrease lifespan
+            p.lifespan--;
+            
+            // Remove dead particles
+            if (p.lifespan <= 0) {
+                particles.splice(i, 1);
+                continue;
+            }
+            
+            // Draw particle
+            let alpha = 255 * (p.lifespan / p.maxLifespan);
+            let size = p.size * (0.5 + 0.5 * (p.lifespan / p.maxLifespan));
+            
+            fill(p.color[0], p.color[1], p.color[2], alpha);
+            noStroke();
+            ellipse(p.x, p.y, size, size);
+        }
+    }
+    
+    function checkCollisions() {
+        let playerRadius = Config.playerDistanceFromCenter;
+        
+        // Check collisions with barriers
+        for (let barrier of barriers) {
+            // Check if barrier is near player's orbit
+            let distToBarrier = abs(barrier.distance - playerRadius);
+            
+            if (distToBarrier < barrier.thickness / 2) {
+                // Check if player angle is within barrier's angles
+                let playerAngleNormalized = (playerAngle + 360) % 360;
+                let startAngleNormalized = (barrier.startAngle + 360) % 360;
+                let endAngleNormalized = (barrier.endAngle + 360) % 360;
+                
+                let collision = false;
+                
+                // Handle angle wrap-around
+                if (startAngleNormalized < endAngleNormalized) {
+                    if (playerAngleNormalized >= startAngleNormalized && 
+                        playerAngleNormalized <= endAngleNormalized) {
+                        collision = true;
+                    }
+                } else {
+                    if (playerAngleNormalized >= startAngleNormalized || 
+                        playerAngleNormalized <= endAngleNormalized) {
+                        collision = true;
+                    }
+                }
+                
+                if (collision) {
+                    // Collision detected!
+                    gameOver();
+                    return;
+                }
+            }
+        }
+    }
+    
+    function gameOver() {
+        gameState = 'gameOver';
+        
+        // Add explosion particles
+        for (let i = 0; i < 40; i++) {
+            let angle = random(360);
+            let distance = random(10, 30);
+            let x = Config.playerDistanceFromCenter * cos(playerAngle) + distance * cos(angle);
+            let y = Config.playerDistanceFromCenter * sin(playerAngle) + distance * sin(angle);
+            
+            addParticle(
+                x, y,
+                random(-3, 3),
+                random(-3, 3),
+                random(5, 20) * gameScaleFactor,
+                [255, 200, 100],
+                random(60, 120)
+            );
+        }
+        
+        // Update high scores
+        if (score > sessionHighScore) {
+            sessionHighScore = score;
+        }
+        
+        if (score > lifetimeHighScore) {
+            lifetimeHighScore = score;
+            // Save to localStorage
+            saveHighScores();
+        }
+    }
+    
+    function checkForThemeChange() {
+        // Change theme based on score milestones
+        let themeIndex = floor(min(score / 30, Config.colorThemes.length - 1));
+        
+        if (themeIndex !== targetTheme) {
+            targetTheme = themeIndex;
+            themeBlendFactor = 0;
+        }
+        
+        // Blend themes
+        if (themeBlendFactor < 1) {
+            themeBlendFactor += 0.01;
+        }
+    }
+    
+    function changeTheme() {
+        // Choose a new theme different from the current one
+        let newTheme;
+        do {
+            newTheme = floor(random(Config.colorThemes.length));
+        } while (newTheme === targetTheme);
+        
+        targetTheme = newTheme;
+        themeBlendFactor = 0;
+    }
+    
+    function getCurrentThemeColors() {
+        if (themeBlendFactor >= 1) {
+            return Config.colorThemes[targetTheme];
+        }
+        
+        // Blend between current and target theme
+        let current = Config.colorThemes[currentTheme];
+        let target = Config.colorThemes[targetTheme];
+        
+        let blended = {};
+        
+        for (let key in current) {
+            if (Array.isArray(current[key])) {
+                blended[key] = current[key].map((val, i) => {
+                    return lerp(val, target[key][i], themeBlendFactor);
+                });
+            } else {
+                blended[key] = lerp(current[key], target[key], themeBlendFactor);
+            }
+        }
+        
+        return blended;
+    }
+    
+    // Drawing functions
+    
+    function drawBackground() {
+        let themeColors = getCurrentThemeColors();
+        
+        // Draw gradient background
+        let gradientStart = color(themeColors.bg[0], themeColors.bg[1], themeColors.bg[2]);
+        let gradientEnd = color(themeColors.bgGradient[0], themeColors.bgGradient[1], themeColors.bgGradient[2]);
+        
+        // Draw layered background
+        for (let layer of backgroundLayers) {
+            push();
+            rotate(frameCount * layer.speed + layer.offset);
+            
+            let layerSize = max(canvasWidth, canvasHeight) * 2 * layer.depth;
+            let layerAlpha = map(layer.depth, 0.2, 0.8, 80, 20);
+            
+            noStroke();
+            fill(lerpColor(gradientStart, gradientEnd, layer.depth), layerAlpha);
+            ellipse(0, 0, layerSize, layerSize);
+            pop();
+        }
+    }
+    
+    function drawForestElements() {
+        let themeColors = getCurrentThemeColors();
+        
+        // Calculate player's angle in radians for parallax
+        let playerRad = radians(playerAngle);
+        
+        for (let tree of forestElements) {
+            // Apply parallax effect based on depth
+            let parallaxX = -sin(playerRad) * tree.depth * 100;
+            let parallaxY = cos(playerRad) * tree.depth * 100;
+            
+            // Calculate sway
+            let sway = sin(frameCount * tree.swaySpeed + tree.swayOffset) * tree.swayAmount;
+            
+            push();
+            translate(tree.x + parallaxX, tree.y + parallaxY);
+            rotate(sway);
+            
+            // Draw tree based on type
+            noStroke();
+            
+            // Tree trunk
+            fill(100, 70, 40, 150);
+            rect(0, 0, tree.size * 0.2, tree.size * 0.8);
+            
+            // Tree foliage
+            fill(themeColors.forest[0], themeColors.forest[1], themeColors.forest[2], 150);
+            
+            if (tree.type === 0) {
+                // Rounded top tree
+                ellipse(0, -tree.size * 0.3, tree.size * 0.7, tree.size * 0.7);
+            } else if (tree.type === 1) {
+                // Triangular tree
+                triangle(-tree.size * 0.4, tree.size * 0.1,
+                         tree.size * 0.4, tree.size * 0.1,
+                         0, -tree.size * 0.7);
+            } else {
+                // Bushy tree
+                ellipse(0, -tree.size * 0.2, tree.size * 0.5, tree.size * 0.5);
+                ellipse(-tree.size * 0.2, -tree.size * 0.4, tree.size * 0.4, tree.size * 0.4);
+                ellipse(tree.size * 0.2, -tree.size * 0.4, tree.size * 0.4, tree.size * 0.4);
+                ellipse(0, -tree.size * 0.6, tree.size * 0.3, tree.size * 0.3);
+            }
+            
+            pop();
+        }
+        
+        // Draw clouds
+        for (let cloud of cloudElements) {
+            // Apply parallax effect
+            let parallaxX = -sin(playerRad) * cloud.depth * 200;
+            let parallaxY = cos(playerRad) * cloud.depth * 200;
+            
+            push();
+            translate(cloud.x + parallaxX, cloud.y + parallaxY);
+            
+            // Draw cloud
+            noStroke();
+            fill(themeColors.clouds[0], themeColors.clouds[1], themeColors.clouds[2], themeColors.clouds[3]);
+            
+            ellipse(0, 0, cloud.width * 0.5, cloud.height);
+            ellipse(cloud.width * 0.3, 0, cloud.width * 0.4, cloud.height * 0.9);
+            ellipse(-cloud.width * 0.3, 0, cloud.width * 0.4, cloud.height * 0.8);
+            ellipse(cloud.width * 0.1, -cloud.height * 0.2, cloud.width * 0.3, cloud.height * 0.6);
+            
+            pop();
+        }
+    }
+    
+    function drawSpiritGuides() {
+        let themeColors = getCurrentThemeColors();
+        
+        for (let spirit of spiritGuides) {
+            // Calculate position
+            let angle = spirit.angle + frameCount * spirit.speed;
+            let distance = spirit.distance;
+            
+            // Add bobbing motion
+            distance += sin(frameCount * spirit.pulseSpeed + spirit.phaseOffset) * 10;
+            
+            // Calculate x, y
+            let x = distance * cos(angle);
+            let y = distance * sin(angle);
+            
+            // Draw spirit guide
+            push();
+            translate(x, y);
+            
+            // Glow effect
+            let glowSize = spirit.size * (1.5 + sin(frameCount * 0.1 + spirit.phaseOffset) * 0.2);
+            let glowAlpha = 100 + sin(frameCount * 0.2 + spirit.phaseOffset) * 50;
+            
+            fill(themeColors.spirits[0], themeColors.spirits[1], themeColors.spirits[2], glowAlpha);
+            ellipse(0, 0, glowSize, glowSize);
+            
+            // Core
+            fill(255, 255, 255, 200);
+            ellipse(0, 0, spirit.size, spirit.size);
+            
+            pop();
+            
+            // Occasionally emit particles
+            if (random() < 0.1) {
+                addParticle(
+                    x, y,
+                    random(-0.5, 0.5),
+                    random(-0.5, 0.5),
+                    random(3, 8) * gameScaleFactor,
+                    themeColors.particles,
+                    random(30, 60)
+                );
+            }
+        }
+    }
+    
+    function drawBarriers() {
+        let themeColors = getCurrentThemeColors();
+        
+        noFill();
+        strokeCap(PROJECT);
+        
+        for (let barrier of barriers) {
+            // Calculate barrier properties
+            let innerRadius = barrier.distance - barrier.thickness / 2;
+            let outerRadius = barrier.distance + barrier.thickness / 2;
+            
+            // Draw outer edge
+            strokeWeight(2);
+            stroke(themeColors.barriers[0], themeColors.barriers[1], themeColors.barriers[2], barrier.alpha * 0.7);
+            arc(0, 0, outerRadius * 2, outerRadius * 2, barrier.startAngle, barrier.endAngle);
+            
+            // Draw inner edge
+            stroke(themeColors.barriers[0], themeColors.barriers[1], themeColors.barriers[2], barrier.alpha * 0.7);
+            arc(0, 0, innerRadius * 2, innerRadius * 2, barrier.startAngle, barrier.endAngle);
+            
+            // Draw connecting lines
+            strokeWeight(1);
+            line(
+                innerRadius * cos(barrier.startAngle), innerRadius * sin(barrier.startAngle),
+                outerRadius * cos(barrier.startAngle), outerRadius * sin(barrier.startAngle)
+            );
+            
+            line(
+                innerRadius * cos(barrier.endAngle), innerRadius * sin(barrier.endAngle),
+                outerRadius * cos(barrier.endAngle), outerRadius * sin(barrier.endAngle)
+            );
+            
+            // Fill with semi-transparent color
+            fill(themeColors.barriers[0], themeColors.barriers[1], themeColors.barriers[2], barrier.alpha * 0.4);
+            beginShape();
+            vertex(innerRadius * cos(barrier.startAngle), innerRadius * sin(barrier.startAngle));
+            vertex(outerRadius * cos(barrier.startAngle), outerRadius * sin(barrier.startAngle));
+            
+            let steps = 10;
+            for (let i = 0; i <= steps; i++) {
+                let a = map(i, 0, steps, barrier.startAngle, barrier.endAngle);
+                vertex(outerRadius * cos(a), outerRadius * sin(a));
+            }
+            
+            vertex(outerRadius * cos(barrier.endAngle), outerRadius * sin(barrier.endAngle));
+            vertex(innerRadius * cos(barrier.endAngle), innerRadius * sin(barrier.endAngle));
+            
+            for (let i = steps; i >= 0; i--) {
+                let a = map(i, 0, steps, barrier.startAngle, barrier.endAngle);
+                vertex(innerRadius * cos(a), innerRadius * sin(a));
+            }
+            
+            endShape(CLOSE);
+            noFill();
+        }
+    }
+    
+    function drawDestinations() {
+        let themeColors = getCurrentThemeColors();
+        
+        for (let dest of destinations) {
+            // Calculate pulse size
+            let pulseAmount = 1 + sin(frameCount * 0.1) * dest.pulseAmount;
+            let radius = dest.radius * pulseAmount;
+            
+            // Draw destination portal
+            push();
+            noFill();
+            stroke(255, 255, 255, dest.alpha * 0.7);
+            strokeWeight(3);
+            ellipse(0, 0, dest.distance * 2, dest.distance * 2);
+            
+            // Draw portal
+            for (let i = 0; i < 3; i++) {
+                let alpha = map(i, 0, 2, 0.8, 0.2) * dest.alpha;
+                stroke(themeColors.spirits[0], themeColors.spirits[1], themeColors.spirits[2], alpha);
+                strokeWeight(3 - i);
+                ellipse(0, 0, dest.distance * 2 - i * 10, dest.distance * 2 - i * 10);
+            }
+            
+            // Draw radial lines
+            stroke(255, 255, 255, dest.alpha * 0.3);
+            strokeWeight(1);
+            for (let i = 0; i < 12; i++) {
+                let angle = i * 30 + frameCount * 0.2;
+                line(
+                    (dest.distance - 20) * cos(angle), (dest.distance - 20) * sin(angle),
+                    (dest.distance + 20) * cos(angle), (dest.distance + 20) * sin(angle)
+                );
+            }
+            
+            pop();
+            
+            // Emit particles occasionally
+            if (random() < 0.3) {
+                let angle = random(360);
+                let x = dest.distance * cos(angle);
+                let y = dest.distance * sin(angle);
+                
+                addParticle(
+                    x, y,
+                    random(-1, 1),
+                    random(-1, 1),
+                    random(5, 12) * gameScaleFactor,
+                    themeColors.particles,
+                    random(40, 80)
+                );
+            }
+        }
+    }
+    
+    function drawPlayer() {
+        let themeColors = getCurrentThemeColors();
+        
+        // Calculate player position
+        let x = Config.playerDistanceFromCenter * cos(playerAngle);
+        let y = Config.playerDistanceFromCenter * sin(playerAngle);
+        
+        // Draw player trail
+        for (let i = 0; i < playerTrail.length; i++) {
+            let point = playerTrail[i];
+            let trailX = point.distance * cos(point.angle);
+            let trailY = point.distance * sin(point.angle);
+            
+            noStroke();
+            fill(themeColors.player[0], themeColors.player[1], themeColors.player[2], point.alpha * 0.5);
+            ellipse(trailX, trailY, point.size, point.size);
+        }
+        
+        // Draw player (cursed traveler)
+        push();
+        translate(x, y);
+        rotate(playerAngle + 90); // Rotate to face direction of travel
+        
+        // Glow effect
+        noStroke();
+        fill(themeColors.player[0], themeColors.player[1], themeColors.player[2], 100);
+        ellipse(0, 0, Config.playerSize * 1.5, Config.playerSize * 1.5);
+        
+        // Player body
+        fill(themeColors.player[0], themeColors.player[1], themeColors.player[2]);
+        beginShape();
+        vertex(0, -Config.playerSize * 0.5); // Top point
+        vertex(Config.playerSize * 0.4, Config.playerSize * 0.3); // Bottom right
+        vertex(0, Config.playerSize * 0.1); // Bottom middle
+        vertex(-Config.playerSize * 0.4, Config.playerSize * 0.3); // Bottom left
+        endShape(CLOSE);
+        
+        // Inner details
+        fill(themeColors.bg[0], themeColors.bg[1], themeColors.bg[2], 200);
+        ellipse(0, -Config.playerSize * 0.15, Config.playerSize * 0.3, Config.playerSize * 0.3);
+        
+        pop();
+        
+        // Occasionally emit particles from player
+        if (random() < 0.2) {
+            addParticle(
+                x, y,
+                random(-1, 1),
+                random(-1, 1),
+                random(4, 8) * gameScaleFactor,
+                themeColors.player,
+                random(20, 40)
+            );
+        }
+    }
+    
+    function drawHUD() {
+        let themeColors = getCurrentThemeColors();
+        
+        // Score display
+        push();
+        noStroke();
+        fill(255, 200);
+        textSize(24 * gameScaleFactor);
+        textAlign(RIGHT, TOP);
+        text(`Time: ${score.toFixed(1)}s`, canvasWidth - 20, 20);
+        
+        // Theme name
+        textAlign(LEFT, TOP);
+        fill(themeColors.spirits[0], themeColors.spirits[1], themeColors.spirits[2], 200);
+        text(themeColors.name, 20, 20);
+        pop();
+    }
+    
+    function drawStoryHints() {
+        // Update story phrase timing
+        if (frameCount % 300 === 0 || currentStoryPhrase === "") {
+            currentStoryPhrase = random(Config.storyPhrases);
+            storyTextOpacity = 0;
+            storyDisplayTime = 0;
+        }
+        
+        storyDisplayTime++;
+        
+        if (storyDisplayTime < 60) {
+            storyTextOpacity = min(storyTextOpacity + 2, 150);
+        } else if (storyDisplayTime > 240) {
+            storyTextOpacity = max(storyTextOpacity - 2, 0);
+        }
+        
+        // Draw story hint
+        if (storyTextOpacity > 0) {
+            push();
+            noStroke();
+            fill(255, 255, 255, storyTextOpacity);
+            textSize(18 * gameScaleFactor);
+            textAlign(CENTER, CENTER);
+            text(currentStoryPhrase, canvasWidth / 2, canvasHeight - 40);
+            pop();
+        }
+    }
+    
+    function drawIntroScreen() {
+        let themeColors = Config.colorThemes[0];
+        
+        // Draw animated background
+        background(themeColors.bg[0], themeColors.bg[1], themeColors.bg[2]);
+        
+        // Draw animated elements in background
+        push();
+        translate(gameOffsetX, gameOffsetY);
+        
+        // Animated circles
+        noFill();
+        for (let i = 0; i < 5; i++) {
+            let size = 100 + i * 80 + sin(frameCount * 0.02 + i) * 20;
+            stroke(themeColors.spirits[0], themeColors.spirits[1], themeColors.spirits[2], 100 - i * 15);
+            strokeWeight(2);
+            ellipse(0, 0, size, size);
+        }
+        
+        // Draw some particles
+        if (random() < 0.2) {
+            let angle = random(360);
+            let distance = random(50, 200);
+            addParticle(
+                distance * cos(angle),
+                distance * sin(angle),
+                random(-0.5, 0.5),
+                random(-0.5, 0.5),
+                random(5, 15),
+                themeColors.particles,
+                random(60, 120)
+            );
+        }
+        
+        updateAndDrawParticles();
+        pop();
+        
+        // Game title
+        push();
+        textAlign(CENTER, CENTER);
+        textSize(48 * gameScaleFactor);
+        fill(255);
+        text("The Cursed Traveler", canvasWidth / 2, canvasHeight * 0.3);
+        
+        // Subtitle
+        textSize(24 * gameScaleFactor);
+        fill(themeColors.spirits[0], themeColors.spirits[1], themeColors.spirits[2]);
+        text("A Journey of Escape", canvasWidth / 2, canvasHeight * 0.4);
+        
+        // Instruction
+        fill(255, 200);
+        textSize(18 * gameScaleFactor);
+        text("Use arrow keys or tap left/right side of screen to rotate", canvasWidth / 2, canvasHeight * 0.6);
+        text("Avoid barriers as you journey through realms", canvasWidth / 2, canvasHeight * 0.65);
+        
+        // Start button
+        let buttonY = canvasHeight * 0.75;
+        let buttonWidth = 200 * gameScaleFactor;
+        let buttonHeight = 60 * gameScaleFactor;
+        let buttonLeft = canvasWidth / 2 - buttonWidth / 2;
+        let buttonRight = buttonLeft + buttonWidth;
+        let buttonTop = buttonY - buttonHeight / 2;
+        let buttonBottom = buttonTop + buttonHeight;
+        
+        // Button highlight if mouse is over
+        let buttonHighlight = (
+            mouseX >= buttonLeft && mouseX <= buttonRight &&
+            mouseY >= buttonTop && mouseY <= buttonBottom
+        );
+        
+        // Draw the button
+        fill(buttonHighlight ? 
+             color(themeColors.spirits[0], themeColors.spirits[1], themeColors.spirits[2]) : 
+             color(themeColors.barriers[0], themeColors.barriers[1], themeColors.barriers[2]));
+        stroke(255, 150);
+        strokeWeight(2);
+        rect(canvasWidth / 2, buttonY, buttonWidth, buttonHeight, 10);
+        
+        // Button text
+        fill(255);
+        noStroke();
+        textSize(24 * gameScaleFactor);
+        text("Begin Journey", canvasWidth / 2, buttonY);
+        
+        // Read story button
+        let storyButtonY = buttonY + buttonHeight + 20;
+        fill(buttonHighlight ? 150 : 100);
+        noStroke();
+        textSize(18 * gameScaleFactor);
+        text("Read the Story", canvasWidth / 2, storyButtonY);
+        
+        pop();
+        
+        // Check for button clicks
+        if (mouseIsPressed && buttonHighlight) {
+            startGame();
+        }
+    }
+    
+    function drawStoryScreen() {
+        let themeColors = Config.colorThemes[0];
+        
+        // Draw animated background (dimmed)
+        background(themeColors.bg[0] * 0.6, themeColors.bg[1] * 0.6, themeColors.bg[2] * 0.6);
+        
+        // Draw story content
+        push();
+        textAlign(CENTER, TOP);
+        
+        // Fade in effect
+        if (storyFadeIn < 255) {
+            storyFadeIn += 5;
+        }
+        
+        // Story title
+        fill(255, storyFadeIn);
+        textSize(36 * gameScaleFactor);
+        text("The Curse of Endless Barriers", canvasWidth / 2, canvasHeight * 0.15);
+        
+        // Story content
+        fill(255, 230, 200, storyFadeIn);
+        textSize(18 * gameScaleFactor);
+        textAlign(LEFT, TOP);
+        
+        let storyText;
+        if (storyPage === 0) {
+            storyText = "In a realm where spirits guide and shadows follow, there lived a traveler known for finding paths others could not see.\n\n" +
+                       "The traveler's gift drew the envy of a powerful entity who placed a curse upon them: 'May walls close in around you whenever you approach your destination.'\n\n" +
+                       "From that day forward, the traveler found that each place they journeyed to would suddenly manifest closing barriers, threatening to trap them forever.";
+        } else if (storyPage === 1) {
+            storyText = "The spirits of the forest took pity on the traveler. They couldn't break the curse, but they offered guidance - faint glimmers of light showing safe passages through the appearing walls.\n\n" +
+                       "The traveler learned to follow these spirit guides, moving quickly through the gaps before the barriers could close completely.\n\n" +
+                       "Now, they journey endlessly from one realm to another, always moving, always escaping, guided by ancient spirits through an endless series of closing barriers.";
+        } else {
+            storyText = "As you take control of the cursed traveler's journey, remember:\n\n" +
+                       "- Move swiftly but with purpose\n" +
+                       "- Trust the spirit guides that show safe paths\n" +
+                       "- Each realm you reach brings new challenges\n" +
+                       "- The curse cannot be broken, only outrun\n\n" +
+                       "How long can you help the traveler survive in a world where destinations become traps?";
+        }
+        
+        // Split text into lines and draw with proper spacing
+        let lines = storyText.split('\n');
+        let y = canvasHeight * 0.25;
+        let lineHeight = 24 * gameScaleFactor;
+        
+        for (let line of lines) {
+            text(line, canvasWidth * 0.2, y, canvasWidth * 0.6);
+            y += lineHeight;
+        }
+        
+        // Navigation buttons
+        textAlign(CENTER, CENTER);
+        
+        // Back button (except on first page)
+        if (storyPage > 0) {
+            fill(150, storyFadeIn);
+            text("◄ Previous", canvasWidth * 0.3, canvasHeight * 0.85);
+        }
+        
+        // Next button (except on last page)
+        if (storyPage < 2) {
+            fill(150, storyFadeIn);
+            text("Next ►", canvasWidth * 0.7, canvasHeight * 0.85);
+        }
+        
+        // Start game button on last page
+        if (storyPage === 2) {
+            fill(themeColors.spirits[0], themeColors.spirits[1], themeColors.spirits[2], storyFadeIn);
+            text("Begin Journey", canvasWidth * 0.7, canvasHeight * 0.85);
+        }
+        
+        // Return to main menu
+        fill(150, storyFadeIn);
+        text("Return to Menu", canvasWidth * 0.5, canvasHeight * 0.9);
+        
+        pop();
+    }
+    
+    function drawGameOverScreen() {
+        // Semi-transparent overlay
+        fill(0, 0, 0, 180);
+        rect(0, 0, canvasWidth, canvasHeight);
+        
+        push();
+        textAlign(CENTER, CENTER);
+        
+        // Game Over text
+        fill(255, 100, 80);
+        textSize(48 * gameScaleFactor);
+        text("The Barriers Claim Another", canvasWidth / 2, canvasHeight * 0.3);
+        
+        // Score display
+        fill(255);
+        textSize(28 * gameScaleFactor);
+        text(`Your Journey: ${score.toFixed(1)} seconds`, canvasWidth / 2, canvasHeight * 0.42);
+        
+        // High scores
+        textSize(20 * gameScaleFactor);
+        text(`Session Best: ${sessionHighScore.toFixed(1)} seconds`, canvasWidth / 2, canvasHeight * 0.5);
+        text(`All-time Best: ${lifetimeHighScore.toFixed(1)} seconds`, canvasWidth / 2, canvasHeight * 0.56);
+        
+        // Try again button
+        let buttonY = canvasHeight * 0.7;
+        let buttonWidth = 220 * gameScaleFactor;
+        let buttonHeight = 60 * gameScaleFactor;
+        
+        fill(80, 120, 200);
+        stroke(255, 150);
+        strokeWeight(2);
+        rect(canvasWidth / 2, buttonY, buttonWidth, buttonHeight, 10);
+        
+        fill(255);
+        noStroke();
+        textSize(24 * gameScaleFactor);
+        text("Journey Again", canvasWidth / 2, buttonY);
+        
+        // Return to menu link
+        fill(200);
+        textSize(18 * gameScaleFactor);
+        text("Return to Menu", canvasWidth / 2, canvasHeight * 0.8);
+        
+        pop();
+    }
+    
+    // Input handling functions
+    
+    function handleInput() {
+        // Reset rotation speed
+        playerRotationSpeed = 0;
+        
+        // Apply keyboard input
+        if (keys.left) {
+            if (holdStartTime.left !== null) {
+                let holdDuration = millis() - holdStartTime.left;
+                playerRotationSpeed = -calculateHoldSpeed(holdDuration);
+            }
+        }
+        
+        if (keys.right) {
+            if (holdStartTime.right !== null) {
+                let holdDuration = millis() - holdStartTime.right;
+                playerRotationSpeed = calculateHoldSpeed(holdDuration);
+            }
+        }
+        
+        // Apply touch input
+        if (touch.left) {
+            if (holdStartTime.left !== null) {
+                let holdDuration = millis() - holdStartTime.left;
+                playerRotationSpeed = -calculateHoldSpeed(holdDuration);
+            }
+        }
+        
+        if (touch.right) {
+            if (holdStartTime.right !== null) {
+                let holdDuration = millis() - holdStartTime.right;
+                playerRotationSpeed = calculateHoldSpeed(holdDuration);
+            }
+        }
+    }
+    
+    function calculateHoldSpeed(holdDuration) {
+        let speed = Config.holdBaseSpeed + 
+                    pow(holdDuration * Config.holdAccelerationFactor, Config.holdExponent);
+        return min(speed, Config.maxHoldSpeed);
+    }
+    
+    function keyPressed() {
+        if (gameState === 'playing') {
+            if (keyCode === LEFT_ARROW) {
+                keys.left = true;
+                if (holdStartTime.left === null) {
+                    playerTargetAngle -= Config.tapRotationAmount;
+                    holdStartTime.left = millis();
+                }
+                return false;
+            } else if (keyCode === RIGHT_ARROW) {
+                keys.right = true;
+                if (holdStartTime.right === null) {
+                    playerTargetAngle += Config.tapRotationAmount;
+                    holdStartTime.right = millis();
+                }
+                return false;
+            }
+        } else if (gameState === 'gameOver' || gameState === 'intro' || gameState === 'story') {
+            if (keyCode === ENTER || keyCode === RETURN || keyCode === 32) { // Enter or Space
+                startGame();
+                return false;
+            } else if (keyCode === ESCAPE) {
+                gameState = 'intro';
+                return false;
+            }
+        }
+        return true;
+    }
+    
+    function keyReleased() {
+        if (keyCode === LEFT_ARROW) {
+            keys.left = false;
+            holdStartTime.left = null;
+        } else if (keyCode === RIGHT_ARROW) {
+            keys.right = false;
+            holdStartTime.right = null;
+        }
+    }
+    
+    function touchStarted() {
+        // Handle touch based on game state
+        if (gameState === 'intro') {
+            // Check if touch is on start button
+            let buttonY = canvasHeight * 0.75;
+            let buttonWidth = 200 * gameScaleFactor;
+            let buttonHeight = 60 * gameScaleFactor;
+            let buttonLeft = canvasWidth / 2 - buttonWidth / 2;
+            let buttonRight = buttonLeft + buttonWidth;
+            let buttonTop = buttonY - buttonHeight / 2;
+            let buttonBottom = buttonTop + buttonHeight;
+            
+            if (mouseX >= buttonLeft && mouseX <= buttonRight &&
+                mouseY >= buttonTop && mouseY <= buttonBottom) {
+                startGame();
+                return false;
+            }
+            
+            // Check if touch is on "Read Story" button
+            let storyButtonY = buttonY + buttonHeight + 20;
+            let storyButtonTop = storyButtonY - 15;
+            let storyButtonBottom = storyButtonY + 15;
+            
+            if (mouseX >= buttonLeft && mouseX <= buttonRight &&
+                mouseY >= storyButtonTop && mouseY <= storyButtonBottom) {
+                gameState = 'story';
+                storyPage = 0;
+                storyFadeIn = 0;
+                return false;
+            }
+            
+        } else if (gameState === 'story') {
+            // Handle story navigation
+            if (mouseY > canvasHeight * 0.8) {
+                if (mouseX < canvasWidth * 0.4 && storyPage > 0) {
+                    // Previous page
+                    storyPage--;
+                    storyFadeIn = 0;
+                } else if (mouseX > canvasWidth * 0.6) {
+                    if (storyPage < 2) {
+                        // Next page
+                        storyPage++;
+                        storyFadeIn = 0;
+                    } else {
+                        // Start game from last page
+                        startGame();
+                    }
+                } else if (mouseY > canvasHeight * 0.85) {
+                    // Return to menu
+                    gameState = 'intro';
+                }
+                return false;
+            }
+            
+        } else if (gameState === 'playing') {
+            // Game controls
+            if (touches.length > 0) {
+                let touchX = touches[0].x;
+                
+                if (touchX < canvasWidth / 2) {
+                    // Left side touch
+                    touch.left = true;
+                    touch.right = false;
+                    if (holdStartTime.left === null) {
+                        playerTargetAngle -= Config.tapRotationAmount;
+                        holdStartTime.left = millis();
+                    }
+                    holdStartTime.right = null;
+                } else {
+                    // Right side touch
+                    touch.right = true;
+                    touch.left = false;
+                    if (holdStartTime.right === null) {
+                        playerTargetAngle += Config.tapRotationAmount;
+                        holdStartTime.right = millis();
+                    }
+                    holdStartTime.left = null;
+                }
+                return false;
+            }
+            
+        } else if (gameState === 'gameOver') {
+            // Check if touch is on "Try Again" button
+            let buttonY = canvasHeight * 0.7;
+            let buttonWidth = 220 * gameScaleFactor;
+            let buttonHeight = 60 * gameScaleFactor;
+            let buttonLeft = canvasWidth / 2 - buttonWidth / 2;
+            let buttonRight = buttonLeft + buttonWidth;
+            let buttonTop = buttonY - buttonHeight / 2;
+            let buttonBottom = buttonTop + buttonHeight;
+            
+            if (mouseX >= buttonLeft && mouseX <= buttonRight &&
+                mouseY >= buttonTop && mouseY <= buttonBottom) {
+                startGame();
+                return false;
+            }
+            
+            // Check if touch is on "Return to Menu" link
+            if (mouseY > canvasHeight * 0.78 && mouseY < canvasHeight * 0.82 &&
+                mouseX > canvasWidth * 0.3 && mouseX < canvasWidth * 0.7) {
+                gameState = 'intro';
+                return false;
+            }
+        }
+        
+        return true;
+    }
+    
+    function touchEnded() {
+        touch.left = false;
+        touch.right = false;
+        holdStartTime.left = null;
+        holdStartTime.right = null;
+        return false;
+    }
+    
+    function mousePressed() {
+        // Handle mouse clicks similarly to touch
+        return touchStarted();
+    }
+    
+    function mouseReleased() {
+        return touchEnded();
+    }
+    
+    function startGame() {
+        // Reset player state
+        playerAngle = 0;
+        playerTargetAngle = 0;
+        playerRotationSpeed = 0;
+        
+        // Initialize game elements
+        initializeGame();
+        
+        // Change to playing state
+        gameState = 'playing';
+        startTime = millis();
+        
+        // Attempt to go fullscreen on mobile
+        if (isMobile() && !document.fullscreenElement) {
+            document.documentElement.requestFullscreen().catch(err => {
+                console.log("Fullscreen request failed: ", err);
+            });
+        }
+        
+        // Force landscape on mobile
+        if (isMobile()) {
+            screen.orientation.lock('landscape').catch(err => {
+                console.log("Orientation lock failed: ", err);
+            });
+        }
+    }
+    
+    function isMobile() {
+        return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+    }
+    
+    function loadHighScores() {
+        try {
+            lifetimeHighScore = parseFloat(localStorage.getItem('cursedTravelerHighScore')) || 0;
+        } catch (e) {
+            lifetimeHighScore = 0;
+        }
+        sessionHighScore = 0;
+    }
+    
+    function saveHighScores() {
+        try {
+            localStorage.setItem('cursedTravelerHighScore', lifetimeHighScore.toString());
+        } catch (e) {
+            console.log("Could not save high score to localStorage");
+        }
+    }
+    
+    function windowResized() {
+        setupCanvas();
+        gameScaleFactor = min(canvasWidth / 1920, canvasHeight / 1080);
+        gameOffsetX = canvasWidth / 2;
+        gameOffsetY = canvasHeight / 2;
+    }
+    
+    // Prevent context menu on long press (mobile)
+    window.oncontextmenu = function(event) {
+        event.preventDefault();
+        event.stopPropagation();
+        return false;
+    };
+    </script>
+</body>
+</html>
