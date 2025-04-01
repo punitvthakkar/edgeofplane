@@ -2,374 +2,309 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <!-- Ensure proper mobile scaling and disable zoom -->
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Edge of the Plane</title>
+    <title>Edge of the Plane - Rewritten</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.9.0/p5.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.9.0/addons/p5.sound.min.js"></script>
+    <!-- <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.9.0/addons/p5.sound.min.js"></script> --> <!-- Sound commented out for simplicity for now -->
     <link href="https://fonts.googleapis.com/css2?family=Quicksand:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <link href="https://fonts.googleapis.com/css2?family=Mali:wght@300;400;500;600&display=swap" rel="stylesheet">
     <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
-
+        * { margin: 0; padding: 0; box-sizing: border-box; }
         html, body {
-            width: 100%;
-            height: 100%;
-            overflow: hidden; /* Prevent scroll bars */
-            background-color: #000;
-            display: flex; /* Use flexbox for centering */
-            justify-content: center;
-            align-items: center;
-            touch-action: none; /* Disable browser touch actions like zoom */
+            width: 100%; height: 100%;
+            overflow: hidden; background-color: #000;
+            display: flex; justify-content: center; align-items: center;
+            touch-action: none; /* Crucial for mobile */
             font-family: 'Quicksand', 'Mali', sans-serif;
         }
-
-        #game-container {
-            position: relative;
-            width: 100%;
-            height: 100%;
-            display: flex; /* Ensure canvas is centered within */
-            justify-content: center;
-            align-items: center;
-        }
-
-        canvas {
-            display: block; /* Remove potential extra space below canvas */
-            box-shadow: 0 0 30px rgba(120, 180, 240, 0.3);
-        }
-
-        /* Remove orientation message - adaptive canvas should handle portrait/landscape */
-        #orientation-message { display: none; }
-
+        #game-container { position: relative; width: 100%; height: 100%; display: flex; justify-content: center; align-items: center; }
+        canvas { display: block; box-shadow: 0 0 30px rgba(120, 180, 240, 0.3); }
     </style>
 </head>
 <body>
-    <!-- No orientation message needed anymore -->
     <div id="game-container">
-        <!-- Canvas will be created here by p5.js -->
+        <!-- p5.js Canvas will be created here -->
     </div>
 
     <script>
-    // Game Configuration
+    // --- Configuration ---
     const Config = {
-        // Core Game Settings - Adjusted for Adaptive Canvas
-        playerSizeBase: 35, // Base size, will scale
-        playerDistanceFromCenterFactor: 0.18, // Factor of min(width, height)
-        spiritGuideSizeBase: 15, // Base size
+        // Display & Scaling
+        playerSizeBase: 35,
+        playerOrbitFactor: 0.18, // % of minDimension
+        powerupSizeBase: 25,
+        barrierThicknessBase: 30,
+        uiScaleBase: 1080, // Scale UI relative to this height
 
-        // Controls - Enhanced Speed and Acceleration
-        tapRotationAmount: 10,       // Faster tap rotation
-        holdBaseSpeed: 3.0,        // Increased base speed
-        holdAccelerationFactor: 0.0002, // Faster acceleration ramp
-        holdExponent: 1.8,         // Slightly less steep curve for faster initial accel
-        maxHoldSpeed: 22,          // Higher max speed
+        // Controls (Requirement 3: Faster/Accelerated)
+        holdBaseSpeed: 3.5,        // Start speed when holding
+        holdAcceleration: 0.00025, // How quickly speed increases
+        holdExponent: 1.7,         // Curve of acceleration
+        maxHoldSpeed: 24,          // Max rotation speed (degrees/sec at 60fps)
 
-        // Difficulty Progression - Adjusted for faster pace
-        initialWallSpeedFactor: 0.0025, // Speed relative to min(width, height)
-        wallSpeedIncreaseFactor: 0.0000015, // Relative increase factor
-        initialSpawnInterval: 140,      // Faster initial spawn
-        firstWallDelay: 80,         // Faster first wall
-        spawnIntervalDecreaseFactor: 0.9975, // Slightly faster decrease
-        minSpawnInterval: 30,         // Lower minimum interval
-        initialGapSizeDeg: 75,        // Slightly larger initial gap
-        gapSizeDecreaseFactor: 0.9992, // Slightly faster decrease
-        minGapSizeDeg: 25,          // Lower minimum gap
+        // Gameplay & Difficulty (Requirement 4: Random/Solvable Barriers)
+        initialWallSpeedFactor: 0.0028, // Speed relative to minDimension/sec
+        wallSpeedIncreaseFactor: 0.0000018,
+        initialSpawnInterval: 130, // Frames between waves (at 60fps)
+        firstWallDelay: 70,        // Frames before first wall
+        spawnIntervalDecreaseFactor: 0.9978,
+        minSpawnInterval: 28,
+        initialGapSizeDeg: 80,
+        gapSizeDecreaseFactor: 0.9993,
+        minGapSizeDeg: 24,         // Minimum gap in degrees
 
-        // Spirit Guides (Visual elements)
-        spiritGuidesCount: 5,
-        spiritGuideOrbitSpeed: 0.4,
-        spiritGuideDistanceFactorMin: 0.08, // Relative distance
-        spiritGuideDistanceFactorMax: 0.35, // Relative distance
-
-        // Particles
-        maxParticles: 50, // Slightly reduced for performance on mobile
-        particleLifespan: 100,
-
-        // Power-ups
-        powerupSpawnChance: 0.003, // Chance per frame to spawn a powerup if none exists
-        powerupBaseSize: 25,
-        powerupMoveSpeedFactor: 0.002, // Relative speed
+        // Power-ups (Requirement 5: Specific Types)
+        powerupSpawnChance: 0.0035, // Chance per frame if none active
+        powerupMoveSpeedFactor: 0.0022, // Relative speed
         powerupTypes: {
-            TRANSPARENCY: {
-                id: 'TRANSPARENCY',
-                duration: 5000, // 5 seconds
-                color: [255, 255, 255], // White Ring
-                weight: 5, // Most common
-                symbol: 'T' // For debug/visual aid
-            },
-            BONUS_TIME: {
-                id: 'BONUS_TIME',
-                bonus: 7000, // 7 seconds
-                color: [255, 223, 0], // Yellow Ring
-                weight: 3, // Second most common
-                symbol: '+7'
-            },
-            FIREBALL: {
-                id: 'FIREBALL',
-                duration: 10000, // 10 seconds
-                color: [255, 100, 0], // Orange Ring
-                weight: 1, // Least common
-                symbol: 'F'
-            }
+            TRANSPARENCY: { id: 'TRANSPARENCY', duration: 5000, color: [255, 255, 255], weight: 5, symbol: '👻' },
+            BONUS_TIME: { id: 'BONUS_TIME', bonus: 7000, color: [255, 223, 0], weight: 3, symbol: '+7s' },
+            FIREBALL: { id: 'FIREBALL', duration: 10000, color: [255, 100, 0], weight: 1, symbol: '🔥' }
         },
 
-        // Visual Elements
-        backgroundLayers: 3,
-        forestElements: 60, // Reduced for performance
-        cloudElements: 10,  // Reduced for performance
+        // Visuals
+        playerTrailLength: 10,
+        playerTrailFadeSpeed: 20,
+        maxParticles: 45,
+        particleLifespan: 90,
+        themeChangeScoreInterval: 45, // Seconds between theme changes
 
-        // Story Elements
+        // Story Hints
         storyPhrases: [
-            "Find the gap...", "Keep flowing...", "Spirits guide you...",
-            "Walls are illusions...", "Move with purpose...", "Escape the loop...",
-            "Embrace the challenge...", "Light pierces darkness..."
+            "Find the path...", "Flow through...", "Spirits whisper...",
+            "The walls deceive...", "React quickly...", "Embrace the void...",
+            "Light finds a way...", "Don't stop..."
         ],
+        hintInterval: 400, // Frames between hints
+        hintDuration: 200, // Frames hint stays visible
 
-        // Audio (placeholder)
-        backgroundMusicVolume: 0.4,
-        soundEffectsVolume: 0.6,
-
-        // Color Themes - Ghibli Inspired (Keep existing themes)
+        // Color Themes (Keep existing)
         colorThemes: [
-            { name: "Forest Sanctuary", bg: [120, 180, 120], bgGradient: [100, 160, 100], player: [255, 250, 240], barriers: [60, 80, 40, 200], spirits: [240, 250, 200], particles: [220, 255, 200], forest: [40, 90, 40], clouds: [250, 250, 255, 160] },
-            { name: "Spirit Realm", bg: [70, 80, 140], bgGradient: [40, 50, 100], player: [250, 240, 255], barriers: [20, 30, 80, 200], spirits: [200, 240, 255], particles: [180, 220, 255], forest: [30, 40, 80], clouds: [180, 200, 255, 140] },
-            { name: "Floating Island", bg: [180, 210, 255], bgGradient: [130, 180, 230], player: [255, 255, 240], barriers: [100, 130, 180, 200], spirits: [255, 255, 200], particles: [255, 250, 220], forest: [80, 120, 160], clouds: [255, 255, 255, 180] },
-            { name: "Ancient Forest", bg: [80, 120, 80], bgGradient: [50, 70, 50], player: [240, 255, 240], barriers: [40, 60, 30, 200], spirits: [180, 255, 180], particles: [200, 255, 150], forest: [30, 60, 30], clouds: [230, 255, 230, 130] },
-            { name: "Sunset Journey", bg: [230, 180, 100], bgGradient: [180, 100, 80], player: [255, 255, 240], barriers: [160, 80, 40, 200], spirits: [255, 220, 150], particles: [255, 200, 120], forest: [100, 60, 30], clouds: [255, 220, 200, 150] }
-        ]
+            { name: "Forest Sanctuary", bg: [120, 180, 120], bgGradient: [100, 160, 100], player: [255, 250, 240], barriers: [60, 80, 40, 200], spirits: [240, 250, 200], particles: [220, 255, 200], powerup_bonus: [255, 223, 0], powerup_trans: [255, 255, 255], powerup_fire: [255, 100, 0] },
+            { name: "Spirit Realm", bg: [70, 80, 140], bgGradient: [40, 50, 100], player: [250, 240, 255], barriers: [20, 30, 80, 200], spirits: [200, 240, 255], particles: [180, 220, 255], powerup_bonus: [255, 223, 0], powerup_trans: [255, 255, 255], powerup_fire: [255, 100, 0] },
+            { name: "Floating Island", bg: [180, 210, 255], bgGradient: [130, 180, 230], player: [255, 255, 240], barriers: [100, 130, 180, 200], spirits: [255, 255, 200], particles: [255, 250, 220], powerup_bonus: [255, 223, 0], powerup_trans: [255, 255, 255], powerup_fire: [255, 100, 0] },
+            { name: "Ancient Forest", bg: [80, 120, 80], bgGradient: [50, 70, 50], player: [240, 255, 240], barriers: [40, 60, 30, 200], spirits: [180, 255, 180], particles: [200, 255, 150], powerup_bonus: [255, 223, 0], powerup_trans: [255, 255, 255], powerup_fire: [255, 100, 0] },
+            { name: "Sunset Journey", bg: [230, 180, 100], bgGradient: [180, 100, 80], player: [255, 255, 240], barriers: [160, 80, 40, 200], spirits: [255, 220, 150], particles: [255, 200, 120], powerup_bonus: [255, 223, 0], powerup_trans: [255, 255, 255], powerup_fire: [255, 100, 0] }
+        ],
     };
 
-    // Game State
+    // --- Global State Variables ---
     let gameState = 'intro'; // intro, story, playing, gameOver
-    let storyPage = 0;
-    let storyFadeIn = 0;
     let score = 0;
     let startTime = 0;
     let sessionHighScore = 0;
     let lifetimeHighScore = 0;
-    let currentTheme = 0;
-    let targetTheme = 0;
-    let themeBlendFactor = 1;
     let firstWallSpawned = false;
 
-    // Player State
+    // Player
     let playerAngle = 0;
-    let playerTargetAngle = 0;
-    let playerRotationSpeed = 0;
+    let playerRotationSpeed = 0; // Current speed (degrees per frame)
+    let playerWalkFrame = 0;
+    let playerFacingLeft = false;
     let playerTrail = [];
-    let playerWalkFrame = 0; // Animation frame
-    let playerFacingLeft = false; // Animation direction
-    let playerState = { // For power-up effects
-        isTransparent: false,
-        transparencyEndTime: 0,
-        isFireball: false,
-        fireballEndTime: 0,
-        visualAlpha: 255 // For transparency effect
+    let playerState = {
+        isTransparent: false, transparencyEndTime: 0,
+        isFireball: false, fireballEndTime: 0,
+        visualAlpha: 255
     };
 
-    // Game Elements
-    let forestElements = [];
-    let cloudElements = [];
-    let spiritGuides = [];
-    let particles = [];
+    // Gameplay Elements
     let barriers = [];
     let powerups = [];
-let floatingTexts = [];
-let storyTextOpacity = 0; // Need this too for drawStoryHints
-let storyDisplayTime = 0; // Need this too for drawStoryHints
-let currentStoryPhrase = ""; // <<<< ADD THIS LINE (or ensure it exists and is spelled correctly)
+    let particles = [];
+    let floatingTexts = [];
 
-// Display metrics (Dynamic)
-let canvasWidth, canvasHeight;
+    // Difficulty / Timing
+    let currentDifficulty = {}; // Will be populated in setup/reset
+    let lastFrameTime = 0; // For deltaTime calculation
+    let timeScale = 1; // For potential slow-mo effects (future)
 
-    // Display metrics (Dynamic)
-    let canvasWidth, canvasHeight;
-    let gameScaleFactor; // General scaling for UI elements
-    let centerX, centerY;
-    let playerOrbitRadius; // Calculated based on screen size
-    let minDimension; // min(width, height) for relative scaling
+    // Display & Theme
+    let canvasWidth, canvasHeight, minDimension, centerX, centerY;
+    let gameScaleFactor, playerOrbitRadius; // Calculated dynamic values
+    let currentThemeIndex = 0;
+    let targetThemeIndex = 0;
+    let themeBlendFactor = 1.0;
+    let currentThemeColors = {}; // Holds the active (possibly blended) colors
+
+    // Story / Hints
+    let storyPage = 0;
+    let storyFadeIn = 0;
+    let currentStoryPhrase = "";
+    let storyHintTimer = 0;
+    let storyHintOpacity = 0;
 
     // Input Tracking
-    let keys = { left: false, right: false };
-    let touch = { left: false, right: false };
-    let holdStartTime = { left: null, right: null };
+    let inputState = {
+        left: false, right: false,
+        holdStartLeft: null, holdStartRight: null
+    };
 
-    // --- Core p5.js Functions ---
-
-    function preload() {
-        // Sounds or images could be loaded here if needed
-    }
+    // --- Core P5 Functions ---
 
     function setup() {
-        // 1) Adaptive Canvas: Create canvas filling the window
-        canvasWidth = windowWidth;
-        canvasHeight = windowHeight;
-        createCanvas(canvasWidth, canvasHeight);
-
-        // Set initial dynamic dimensions
-        updateDimensions();
-
-        // Set drawing modes
+        createCanvas(windowWidth, windowHeight);
         angleMode(DEGREES);
         rectMode(CENTER);
         textAlign(CENTER, CENTER);
-        colorMode(RGB);
+        frameRate(60); // Attempt 60fps
 
         loadHighScores();
-        initializeGameElements(); // Initialize non-state dependent elements
-        resetGame(); // Reset game state variables
+        updateDimensions();       // Initial calculation of sizes
+        initializeElements();     // Create non-gameplay visuals
+        resetGame();              // Set initial game state values
+        currentThemeColors = getCurrentThemeColors(); // Initialize colors
 
-        frameRate(60);
+        lastFrameTime = millis(); // Initialize for deltaTime
     }
 
     function draw() {
-        // Update dynamic dimensions in case of resize (though windowResized is better)
-        // updateDimensions(); // Can cause performance issues if called every frame
+        let currentTime = millis();
+        let dt = (currentTime - lastFrameTime) * timeScale; // Delta time in ms
+        let dtFactor = dt / (1000 / 60); // Factor relative to ideal 60fps frame time
+        lastFrameTime = currentTime;
 
-        // Get blended theme colors
-        let themeColors = getCurrentThemeColors();
-
-        // Performance - Update frame timing (optional)
-        // updateFrameTime();
-
-        // Handle camera/world rotation centered on the player's orbit center
-        let cameraAngle = -playerAngle; // Rotate world opposite to player for centered view
-
-        // --- Game State Logic ---
-        if (gameState === 'intro') {
-            drawIntroScreen(themeColors);
-        } else if (gameState === 'story') {
-            drawStoryScreen(themeColors);
-        } else if (gameState === 'playing') {
-            updatePlaying();
-
-            // Draw World (Rotated)
-            push();
-            translate(centerX, centerY);
-            rotate(cameraAngle); // Apply world rotation
-
-            drawBackground(themeColors);
-            drawForestElements(themeColors); // Needs position relative to center
-            updateAndDrawParticles(themeColors);
-            drawPowerups(themeColors);
-            drawBarriers(themeColors);
-            drawSpiritGuides(themeColors);
-
-            // Draw Player (at fixed orbit relative to center)
-            drawPlayer(themeColors);
-
-            pop(); // Restore translation/rotation
-
-            // Draw HUD (Not Rotated)
-            drawHUD(themeColors);
-            drawStoryHints(themeColors);
-            drawFloatingTexts();
-
-            // Check Collisions (after drawing, uses playerAngle)
-            checkCollisions();
-            checkPowerupCollisions();
-
-        } else if (gameState === 'gameOver') {
-            // Draw Final Frame (Frozen)
-             push();
-            translate(centerX, centerY);
-            rotate(cameraAngle);
-            drawBackground(themeColors);
-            drawForestElements(themeColors);
-            updateAndDrawParticles(themeColors); // Draw remaining particles
-            drawPowerups(themeColors); // Draw remaining powerups
-            drawBarriers(themeColors);
-            drawSpiritGuides(themeColors);
-            drawPlayer(themeColors); // Draw player in final state
-            pop();
-
-            // Draw Game Over Overlay
-            drawGameOverScreen(themeColors);
-            drawFloatingTexts(); // Show any final score popups
+        // --- Update Game State ---
+        switch (gameState) {
+            case 'playing':
+                updatePlaying(dt, dtFactor);
+                break;
+            case 'intro':
+            case 'story':
+            case 'gameOver':
+                // Minimal updates for animations if any
+                updateParticles(dtFactor); // Update particles even on menus
+                break;
         }
 
-        // --- Performance Debug (Optional) ---
-        // drawPerformanceDebug();
+        // --- Update Visuals ---
+        updateThemeBlending(dtFactor);
+        currentThemeColors = getCurrentThemeColors(); // Get current/blended colors
+
+        // --- Drawing ---
+        let cameraAngle = -playerAngle; // Rotate world opposite to player
+
+        // Draw background (always drawn)
+        drawBackground(currentThemeColors); // Uses screen coords
+
+        // Draw world elements (rotated)
+        push();
+        translate(centerX, centerY);
+        rotate(cameraAngle);
+        updateAndDrawSpiritGuides(dtFactor, currentThemeColors); // Example element update/draw
+        updateAndDrawParticles(dtFactor); // Particles are in world space
+        drawBarriers(currentThemeColors);
+        drawPowerups(currentThemeColors);
+        drawPlayerTrail(currentThemeColors); // Trail is part of the player's world presence
+        drawPlayer(currentThemeColors); // Player is drawn at the correct world angle
+        pop();
+
+        // Draw UI / Overlays (not rotated)
+        switch (gameState) {
+            case 'playing':
+                drawHUD(currentThemeColors);
+                drawFloatingTexts(dtFactor);
+                drawStoryHints(dtFactor, currentThemeColors);
+                break;
+            case 'intro':
+                drawIntroScreen(currentThemeColors);
+                break;
+            case 'story':
+                drawStoryScreen(currentThemeColors);
+                break;
+            case 'gameOver':
+                // Draw frozen game world elements first (optional, could just draw overlay)
+                push();
+                translate(centerX, centerY);
+                rotate(cameraAngle); // Use final camera angle
+                // Redraw elements in their final state if desired
+                updateAndDrawSpiritGuides(0, currentThemeColors); // 0 dtFactor = no update
+                updateAndDrawParticles(0);
+                drawBarriers(currentThemeColors);
+                drawPowerups(currentThemeColors);
+                drawPlayerTrail(currentThemeColors);
+                drawPlayer(currentThemeColors);
+                pop();
+                // Then draw overlay
+                drawGameOverScreen(currentThemeColors);
+                drawFloatingTexts(dtFactor); // Show final score popups
+                break;
+        }
     }
 
     // --- Update Functions ---
 
-    function updatePlaying() {
-        let now = millis();
-        let elapsedTimeSeconds = (now - startTime) / 1000;
-        score = elapsedTimeSeconds;
+    function updatePlaying(dt, dtFactor) {
+        score = (millis() - startTime) / 1000;
 
-        updateDifficulty();
-        updatePlayer(now);
-        updateEnvironment(); // Clouds, etc.
-        updatePowerups();
-        updateBarriers();
-        updateFloatingTexts();
+        // Order is important: Input -> Player Update -> Collision Checks
+        handleInput(dt); // Update playerRotationSpeed based on input
+        updatePlayer(dt, dtFactor); // Update angle, state, animation
+        updateBarriers(dtFactor);
+        updatePowerups(dtFactor);
+        updateFloatingTexts(dtFactor);
 
-        // Handle spawning
-        if (!firstWallSpawned && frameCount > Config.firstWallDelay) {
-            spawnBarrierWave();
-            firstWallSpawned = true;
-        } else if (firstWallSpawned && frameCount % floor(currentDifficulty.spawnInterval) === 0) {
-            spawnBarrierWave();
-        }
+        checkCollisions(); // Check after movement
+        checkPowerupCollisions(); // Check after movement
 
-        // Spawn powerups randomly if none are present
-        if (powerups.length === 0 && random() < Config.powerupSpawnChance) {
-            spawnPowerup();
-        }
-
-        checkForThemeChange();
-        updateThemeBlending();
+        updateDifficulty(); // Update based on current score
+        spawnElements(); // Spawn barriers/powerups based on timers/chance
+        checkForThemeChange(); // Check if theme should change
     }
 
-    let currentDifficulty = {}; // Initialize object
-    function updateDifficulty() {
-        let elapsedTimeSeconds = score;
-        minDimension = min(width, height); // Use current dimensions
+    function handleInput(dt) {
+        // Reset speed, then apply based on current input state
+        playerRotationSpeed = 0;
+        let now = millis(); // Use consistent time for hold duration calculation
 
-        currentDifficulty.wallSpeed = (Config.initialWallSpeedFactor + elapsedTimeSeconds * Config.wallSpeedIncreaseFactor) * minDimension;
-        currentDifficulty.spawnInterval = max(Config.minSpawnInterval, Config.initialSpawnInterval * pow(Config.spawnIntervalDecreaseFactor, elapsedTimeSeconds));
-        currentDifficulty.gapSize = max(Config.minGapSizeDeg, Config.initialGapSizeDeg * pow(Config.gapSizeDecreaseFactor, elapsedTimeSeconds));
-        currentDifficulty.powerupMoveSpeed = Config.powerupMoveSpeedFactor * minDimension;
-    }
-
-    function updatePlayer(now) {
-        handleInput(); // Calculate playerRotationSpeed based on input
-
-        // Smooth rotation (optional, direct rotation feels more responsive)
-        // playerAngle = lerp(playerAngle, playerTargetAngle, 0.6);
-        playerAngle += playerRotationSpeed * (deltaTime / 16.667); // Scale speed by deltaTime
-        playerAngle = (playerAngle + 360) % 360;
-
-        // Sync target angle if actively rotating
-        if (playerRotationSpeed !== 0) {
-            playerTargetAngle = playerAngle;
+        if (inputState.left) {
+            if (inputState.holdStartLeft === null) inputState.holdStartLeft = now;
+            let holdDuration = now - inputState.holdStartLeft;
+            playerRotationSpeed = -calculateHoldSpeed(holdDuration);
+        } else {
+            inputState.holdStartLeft = null; // Clear timer when not held
         }
 
-        // 2) Animated Stick Figure: Update animation state
-        if (abs(playerRotationSpeed) > 0.1) { // Threshold to trigger walking
-            playerWalkFrame += abs(playerRotationSpeed) * 0.015 * (deltaTime / 16.667); // Link animation speed to rotation speed & framerate
-            if (playerWalkFrame > 4) playerWalkFrame -= 4; // Loop animation (0-4 cycle)
+        if (inputState.right) {
+            if (inputState.holdStartRight === null) inputState.holdStartRight = now;
+            let holdDuration = now - inputState.holdStartRight;
+             // If both left/right somehow active, right takes precedence
+            playerRotationSpeed = calculateHoldSpeed(holdDuration);
+        } else {
+            inputState.holdStartRight = null; // Clear timer when not held
+        }
+        // Note: playerRotationSpeed is now degrees per *calculation*. We apply dtFactor later.
+    }
+
+    function calculateHoldSpeed(holdDuration) {
+        let speedFactor = Config.holdBaseSpeed + pow(holdDuration * Config.holdAcceleration, Config.holdExponent);
+        return min(speedFactor, Config.maxHoldSpeed); // Speed factor capped
+    }
+
+    function updatePlayer(dt, dtFactor) {
+        // Apply rotation speed (scaled by deltaTime factor)
+        playerAngle += playerRotationSpeed * dtFactor;
+        playerAngle = (playerAngle % 360 + 360) % 360; // Keep angle in 0-360 range
+
+        // Update Animation State (Requirement 2)
+        if (abs(playerRotationSpeed) > 0.1) { // Animation threshold
+            playerWalkFrame += abs(playerRotationSpeed * dtFactor) * 0.025; // Adjust animation speed factor
+            if (playerWalkFrame > 4) playerWalkFrame %= 4; // Loop 0-4
             playerFacingLeft = playerRotationSpeed < 0;
         } else {
-            playerWalkFrame = 0; // Reset to standing pose frame
+            playerWalkFrame = 0; // Idle frame
         }
 
-        // Update power-up effects
-        if (playerState.isTransparent && now > playerState.transparencyEndTime) {
-            playerState.isTransparent = false;
-            playerState.visualAlpha = 255;
-        } else if (playerState.isTransparent) {
-             // Flicker effect for transparency ending soon
-            if (playerState.transparencyEndTime - now < 1500) {
-                 playerState.visualAlpha = 100 + sin(now * 0.5) * 60; // Flicker between 40 and 160
+        // Update Power-up Effects & Timers
+        let now = millis();
+        playerState.visualAlpha = 255; // Default alpha
+
+        if (playerState.isTransparent) {
+            if (now > playerState.transparencyEndTime) {
+                playerState.isTransparent = false;
             } else {
-                 playerState.visualAlpha = 150; // Semi-transparent
+                let timeLeft = playerState.transparencyEndTime - now;
+                playerState.visualAlpha = (timeLeft < 1500 && (floor(now / 100) % 2 === 0)) ? 100 : 160; // Flicker when ending
             }
         }
 
@@ -377,310 +312,310 @@ let canvasWidth, canvasHeight;
             playerState.isFireball = false;
         }
 
-        updatePlayerTrail();
+        // Update Trail
+        updatePlayerTrail(dtFactor);
     }
 
-    function updatePlayerTrail() {
+    function updatePlayerTrail(dtFactor) {
         let trailSize = Config.playerSizeBase * gameScaleFactor * 0.4;
-        playerTrail.push({
-            angle: playerAngle,
-            distance: playerOrbitRadius,
-            alpha: 200, // Start brighter
-            size: trailSize
-        });
+        playerTrail.push({ angle: playerAngle, distance: playerOrbitRadius, alpha: 200, size: trailSize });
 
-        if (playerTrail.length > 10) playerTrail.shift(); // Shorter trail
+        while (playerTrail.length > Config.playerTrailLength) playerTrail.shift();
 
-        for (let i = 0; i < playerTrail.length; i++) {
-            playerTrail[i].alpha -= 20; // Faster fade
-            playerTrail[i].size *= 0.94; // Faster shrink
+        for (let i = playerTrail.length - 1; i >= 0; i--) {
+            let p = playerTrail[i];
+            p.alpha -= Config.playerTrailFadeSpeed * dtFactor;
+            p.size *= (1 - 0.06 * dtFactor); // Shrink based on dtFactor
+            if (p.alpha <= 0 || p.size < 1) playerTrail.splice(i, 1);
         }
-        playerTrail = playerTrail.filter(p => p.alpha > 0);
     }
 
-    function updateEnvironment() {
-        // Move clouds (Adjust logic for center-based coords if needed)
-        for (let cloud of cloudElements) {
-            cloud.x += cloud.speed * (deltaTime / 16.667);
-            // Wrap clouds around the screen based on world coords
-            let worldEdgeX = width * 1.5; // Adjust wrapping based on parallax/view
-            if (cloud.x > centerX + worldEdgeX) {
-                cloud.x = centerX - worldEdgeX;
-                cloud.y = centerY + random(-height/2, height/2) * cloud.depth;
+    function updateDifficulty() {
+        let elapsedSeconds = score;
+        currentDifficulty.wallSpeed = (Config.initialWallSpeedFactor + elapsedSeconds * Config.wallSpeedIncreaseFactor) * minDimension;
+        currentDifficulty.spawnInterval = max(Config.minSpawnInterval, Config.initialSpawnInterval * pow(Config.spawnIntervalDecreaseFactor, elapsedSeconds));
+        currentDifficulty.gapSize = max(Config.minGapSizeDeg, Config.initialGapSizeDeg * pow(Config.gapSizeDecreaseFactor, elapsedSeconds));
+        currentDifficulty.powerupMoveSpeed = Config.powerupMoveSpeedFactor * minDimension;
+    }
+
+    function updateBarriers(dtFactor) {
+        for (let i = barriers.length - 1; i >= 0; i--) {
+            let b = barriers[i];
+            b.distance -= currentDifficulty.wallSpeed * dtFactor;
+            if (b.alpha < 200) b.alpha = min(200, b.alpha + 8 * dtFactor);
+            if (b.distance < -b.thickness * 2) { // Remove well after passing center
+                barriers.splice(i, 1);
             }
         }
-
-        // Sway forest elements
-         for (let tree of forestElements) {
-            tree.currentSway = sin(frameCount * tree.swaySpeed + tree.swayOffset) * tree.swayAmount;
-         }
     }
 
-    function updatePowerups() {
+    function updatePowerups(dtFactor) {
         for (let i = powerups.length - 1; i >= 0; i--) {
             let p = powerups[i];
-            p.distance -= currentDifficulty.powerupMoveSpeed * (deltaTime / 16.667);
-            p.rotation += 0.5 * (deltaTime / 16.667); // Gentle rotation
-
-            // Fade in
-            if (p.alpha < 255) p.alpha += 5;
-
-            // Remove if passed center
-            if (p.distance < 10) {
+            p.distance -= currentDifficulty.powerupMoveSpeed * dtFactor;
+            p.rotation += 0.5 * dtFactor; // Gentle rotation
+            if (p.alpha < 255) p.alpha = min(255, p.alpha + 5 * dtFactor);
+            if (p.distance < -p.size) { // Remove after passing center
                 powerups.splice(i, 1);
             }
         }
     }
 
-    function updateBarriers() {
-        for (let i = barriers.length - 1; i >= 0; i--) {
-            let b = barriers[i];
-            b.distance -= currentDifficulty.wallSpeed * (deltaTime / 16.667);
-
-            // Fade in barriers as they approach
-            if (b.alpha < 200) b.alpha += 8; // Faster fade-in
-
-            // Remove barriers that have passed the center significantly
-            if (b.distance < -50) { // Remove after passing center
-                barriers.splice(i, 1);
-                continue;
-            }
-
-            // Add warning particles (optional, can impact performance)
-            // let distanceToPlayer = abs(b.distance - playerOrbitRadius);
-            // if (distanceToPlayer < 50 && distanceToPlayer > 40 && random() < 0.2) {
-            //     addWarningParticles(b.startAngle + (b.endAngle - b.startAngle)/2, b.distance, themeColors);
-            // }
-        }
-    }
-
-     function updateFloatingTexts() {
+    function updateFloatingTexts(dtFactor) {
         for (let i = floatingTexts.length - 1; i >= 0; i--) {
             let ft = floatingTexts[i];
-            ft.y -= 0.5 * (deltaTime / 16.667); // Float up
-            ft.alpha -= 3 * (deltaTime / 16.667); // Fade out
-            if (ft.alpha <= 0) {
-                floatingTexts.splice(i, 1);
-            }
+            ft.y -= 0.8 * dtFactor; // Float up faster
+            ft.alpha -= 4 * dtFactor; // Fade out faster
+            if (ft.alpha <= 0) floatingTexts.splice(i, 1);
         }
     }
 
-    function updateThemeBlending() {
-         if (themeBlendFactor < 1) {
-            themeBlendFactor += 0.01 * (deltaTime / 16.667); // Smoother blend
+    function updateThemeBlending(dtFactor) {
+        if (themeBlendFactor < 1) {
+            themeBlendFactor += 0.015 * dtFactor; // Blend speed scaled by dtFactor
             if (themeBlendFactor >= 1) {
                 themeBlendFactor = 1;
-                currentTheme = targetTheme; // Lock in the new theme
+                currentThemeIndex = targetThemeIndex; // Finalize theme change
             }
         }
     }
 
+     function updateAndDrawParticles(dtFactor) {
+        noStroke();
+        for (let i = particles.length - 1; i >= 0; i--) {
+            let p = particles[i];
+            p.x += p.vx * dtFactor;
+            p.y += p.vy * dtFactor;
+            p.lifespan -= dtFactor * (60 / (Config.particleLifespan || 90)); // Scale lifespan decrement
+            p.alpha = 255 * (p.lifespan / 1.0); // Assuming lifespan is 0-1 now
+             p.alpha = max(0, 255 * p.lifespan); // Lifespan is now 1 to 0
+            p.size *= (1 - 0.02 * dtFactor); // Shrink
 
-    // --- Spawning Functions ---
+            if (p.lifespan <= 0 || p.size < 0.5) {
+                particles.splice(i, 1);
+            } else {
+                 // Use particle color defined during creation
+                 fill(p.color[0], p.color[1], p.color[2], p.alpha);
+                ellipse(p.x, p.y, p.size, p.size);
+            }
+        }
+    }
+
+     function updateAndDrawSpiritGuides(dtFactor, colors) {
+        for (let spirit of spiritGuides) {
+            spirit.currentAngle = (spirit.currentAngle + spirit.speed * dtFactor) % 360;
+             let distance = spirit.baseDistance * gameScaleFactor;
+            distance += sin(frameCount * spirit.pulseSpeed + spirit.phaseOffset) * 8 * gameScaleFactor; // Scaled bobbing
+            let size = spirit.baseSize * gameScaleFactor;
+
+            let x = distance * cos(spirit.currentAngle);
+            let y = distance * sin(spirit.currentAngle);
+
+            // Draw (moved from separate draw function)
+             push();
+             translate(x, y);
+             let glowSize = size * (1.5 + sin(frameCount * 2 + spirit.phaseOffset) * 0.2);
+             let glowAlpha = 100 + sin(frameCount * 4 + spirit.phaseOffset) * 50;
+             fill(colors.spirits[0], colors.spirits[1], colors.spirits[2], glowAlpha);
+             noStroke();
+             ellipse(0, 0, glowSize, glowSize);
+             fill(255, 255, 255, 200); // Core
+             ellipse(0, 0, size, size);
+             pop();
+
+            // Emit particles occasionally
+             if (random() < 0.03 * dtFactor) { // Chance scaled by dtFactor
+                 addParticle(x, y, random(-0.5, 0.5), random(-0.5, 0.5),
+                             random(3, 8) * gameScaleFactor, colors.particles, 1.0); // Lifespan 1 to 0
+             }
+        }
+    }
+
+
+    // --- Spawning ---
+
+    function spawnElements() {
+        // Spawn Barriers
+        if (!firstWallSpawned && frameCount > Config.firstWallDelay) {
+            spawnBarrierWave();
+            firstWallSpawned = true;
+        } else if (firstWallSpawned && frameCount % floor(currentDifficulty.spawnInterval) === 0) {
+            spawnBarrierWave();
+        }
+
+        // Spawn Powerups
+        if (powerups.length === 0 && random() < Config.powerupSpawnChance) {
+            spawnPowerup();
+        }
+    }
 
     function spawnBarrierWave() {
-        // 4) Improved Obstacle Generation: Random gap position
-        let spawnDistance = max(width, height) * 0.7; // Spawn closer to edge
+        let spawnDistance = max(width, height) * 0.75; // Spawn further out
         let gapCenterAngle = random(360);
-        let halfGap = currentDifficulty.gapSize / 2;
-
+        let halfGap = max(Config.minGapSizeDeg, currentDifficulty.gapSize) / 2; // Ensure min gap size
         let gapStart = (gapCenterAngle - halfGap + 360) % 360;
         let gapEnd = (gapCenterAngle + halfGap + 360) % 360;
+        let barrierThickness = Config.barrierThicknessBase * gameScaleFactor;
 
-        let barrierThickness = 30 * gameScaleFactor; // Scaled thickness
+        // Barrier 1: From gap end to gap start (potentially wrapping around 0/360)
+        spawnBarrierSegment(gapEnd, gapStart, spawnDistance, barrierThickness);
 
-        // Ensure the gap is actually solvable based on minimum size
-        if (currentDifficulty.gapSize < Config.minGapSizeDeg + 1) {
-             // Maybe widen slightly if at minimum? Or ensure player speed can handle it.
-             // For now, trust the minGapSizeDeg value.
-        }
-
-        // Create barriers covering the non-gap area
-        if (gapStart < gapEnd) {
-            // Gap does not wrap around 0 degrees
-            spawnBarrierSegment(gapEnd, gapStart, spawnDistance, barrierThickness); // Barrier wraps around
-        } else {
-            // Gap wraps around 0 degrees
-            spawnBarrierSegment(gapEnd, 360, spawnDistance, barrierThickness); // Barrier from gap end to 360
-            spawnBarrierSegment(0, gapStart, spawnDistance, barrierThickness);    // Barrier from 0 to gap start
-        }
-
-        // Add hint particles in the safe passage
-        addPassageHintParticles(gapCenterAngle, spawnDistance);
+        // Add hint particles
+         addPassageHintParticles(gapCenterAngle, spawnDistance);
     }
 
-    function spawnBarrierSegment(startAngle, endAngle, distance, thickness) {
-         if (abs(endAngle - startAngle) < 1) return; // Avoid tiny/invalid barriers
+     function spawnBarrierSegment(startAngle, endAngle, distance, thickness) {
+         // This function handles the case where the segment might wrap around 360/0
+         let currentAngle = startAngle;
+         let endTarget = endAngle;
 
-         // Adjust angles slightly inward to avoid visual gaps at connections
-         let adjustedStart = (startAngle + 0.1) % 360;
-         let adjustedEnd = (endAngle - 0.1 + 360) % 360;
-
-         // Handle wrap-around case for angles
-         if (adjustedEnd < adjustedStart && startAngle > endAngle) { // Standard wrap case
-             adjustedEnd = endAngle - 0.1; // Don't add 360 if result is negative
-             if (adjustedEnd < 0) adjustedEnd += 360;
-         }
-          else if (startAngle == 0 && endAngle > 0) {
-             adjustedStart = 0.1; // start slightly after 0
-         } else if (endAngle == 360 && startAngle < 360) {
-              adjustedEnd = 359.9; // end slightly before 360
+         // If endAngle is less than startAngle, it means we wrap around 360
+         if (endTarget < currentAngle) {
+             endTarget += 360;
          }
 
+         // Define the segment properties
+         let barrierData = {
+             startAngle: startAngle % 360,
+             endAngle: endAngle % 360, // Store original end angle
+             distance: distance,
+             thickness: thickness,
+             alpha: 0 // Start transparent
+         };
 
-        // Ensure end is greater than start for arc drawing, may require splitting if it wraps 0->360
-         if (adjustedEnd < adjustedStart) {
-             // Split into two arcs if the segment crosses 0/360
-             barriers.push({
-                 startAngle: adjustedStart, endAngle: 360, distance: distance,
-                 thickness: thickness, alpha: 0
-             });
-              barriers.push({
-                 startAngle: 0, endAngle: adjustedEnd, distance: distance,
-                 thickness: thickness, alpha: 0
-             });
-         } else {
-              barriers.push({
-                 startAngle: adjustedStart, endAngle: adjustedEnd, distance: distance,
-                 thickness: thickness, alpha: 0
-             });
+         // Check if the calculated end is actually different from the start after wrapping
+         if (abs((endTarget - currentAngle + 360) % 360) > 0.1) { // Avoid zero-length barriers
+              barriers.push(barrierData);
          }
     }
+
 
     function spawnPowerup() {
         let spawnDistance = max(width, height) * 0.7;
         let angle = random(360);
-
-        // Choose powerup type based on weight
-        let totalWeight = Object.values(Config.powerupTypes).reduce((sum, type) => sum + type.weight, 0);
-        let rand = random(totalWeight);
-        let chosenType;
-        let cumulativeWeight = 0;
-        for (const type of Object.values(Config.powerupTypes)) {
-            cumulativeWeight += type.weight;
-            if (rand < cumulativeWeight) {
-                chosenType = type;
-                break;
-            }
-        }
-
-        if (!chosenType) chosenType = Config.powerupTypes.TRANSPARENCY; // Default fallback
+        let chosenType = chooseWeightedPowerup();
 
         powerups.push({
             type: chosenType.id,
             angle: angle,
             distance: spawnDistance,
-            size: Config.powerupBaseSize * gameScaleFactor,
+            size: Config.powerupSizeBase * gameScaleFactor,
             color: chosenType.color,
-            symbol: chosenType.symbol, // For drawing
-            duration: chosenType.duration, // Store duration if applicable
-            bonus: chosenType.bonus,       // Store bonus if applicable
-            alpha: 0, // Start transparent
-            rotation: random(360) // Initial visual rotation
+            symbol: chosenType.symbol,
+            duration: chosenType.duration,
+            bonus: chosenType.bonus,
+            alpha: 0,
+            rotation: random(360)
         });
     }
 
-    function addPassageHintParticles(angle, distance) {
-         let themeColors = getCurrentThemeColors();
-         let particleColor = themeColors.spirits || [200, 240, 255]; // Use spirit color for hints
-        for (let i = 0; i < 5; i++) {
-            let offsetAngle = angle + random(-currentDifficulty.gapSize/3, currentDifficulty.gapSize/3); // Spread within gap
-            let offsetDist = distance + random(-15, 15);
-            let x = offsetDist * cos(offsetAngle);
-            let y = offsetDist * sin(offsetAngle);
-            addParticle(x, y, random(-0.5, 0.5), random(-0.5, 0.5),
-                        random(5, 10) * gameScaleFactor, particleColor, random(50, 80));
+    function chooseWeightedPowerup() {
+        let totalWeight = Object.values(Config.powerupTypes).reduce((sum, type) => sum + type.weight, 0);
+        let rand = random(totalWeight);
+        let cumulativeWeight = 0;
+        for (const type of Object.values(Config.powerupTypes)) {
+            cumulativeWeight += type.weight;
+            if (rand < cumulativeWeight) return type;
         }
+        return Config.powerupTypes.TRANSPARENCY; // Fallback
     }
 
-     function addFloatingText(text, x, y, color = [255, 255, 255]) {
-        floatingTexts.push({
-            text: text,
-            x: x,
-            y: y,
-            alpha: 255,
-            color: color
-        });
-    }
+     function addParticle(x, y, vx, vy, size, color, lifespan = 1.0) { // lifespan 1 to 0
+         if (particles.length >= Config.maxParticles) {
+             particles.shift(); // Remove oldest
+         }
+         particles.push({ x, y, vx, vy, size, color: color || [255, 255, 255], lifespan });
+     }
+
+      function addPassageHintParticles(angle, distance) {
+         let colors = getCurrentThemeColors(); // Get current colors
+         let particleColor = colors.spirits || [200, 240, 255];
+         let halfGap = currentDifficulty.gapSize / 2;
+         for (let i = 0; i < 5; i++) {
+             let offsetAngle = angle + random(-halfGap * 0.6, halfGap * 0.6); // Spread within gap center
+             let offsetDist = distance + random(-10, 10);
+             let x = offsetDist * cos(offsetAngle);
+             let y = offsetDist * sin(offsetAngle);
+             addParticle(x, y, random(-0.5, 0.5), random(-0.5, 0.5),
+                         random(4, 9) * gameScaleFactor, particleColor, 0.8); // Shorter lifespan hints
+         }
+     }
 
 
     // --- Collision Detection ---
 
     function checkCollisions() {
-        // 5) Power-up Effects: Check transparency and fireball
-        if (playerState.isTransparent) return; // No collision if transparent
+        if (playerState.isTransparent) return; // Skip if transparent
 
-        let playerHitRadius = (Config.playerSizeBase * gameScaleFactor) * 0.4; // Smaller hitbox
+        let playerHitRadius = Config.playerSizeBase * gameScaleFactor * 0.4; // Use a slightly smaller hitbox
 
         for (let i = barriers.length - 1; i >= 0; i--) {
             let b = barriers[i];
+            if (!b || typeof b.distance !== 'number') continue; // Skip invalid barriers
+
             let distToBarrier = abs(b.distance - playerOrbitRadius);
             let collisionMargin = (b.thickness / 2) + playerHitRadius;
 
             if (distToBarrier < collisionMargin) {
-                let barrierStart = b.startAngle;
-                let barrierEnd = b.endAngle;
+                // Potential collision, check angle
                 let pAngle = playerAngle;
+                let start = b.startAngle;
+                let end = b.endAngle;
 
                 let collided = false;
-                // Normalize angles for easier comparison
-                 barrierStart = (barrierStart + 360) % 360;
-                 barrierEnd = (barrierEnd + 360) % 360;
-                 pAngle = (pAngle + 360) % 360;
-
-
-                // Check collision based on whether the barrier segment wraps around 0/360
-                 if (barrierStart <= barrierEnd) {
-                     // Standard case: Start angle is less than end angle
-                     if (pAngle >= barrierStart && pAngle <= barrierEnd) {
-                         collided = true;
-                     }
-                 } else {
-                      // Wrap-around case: Start angle is greater than end angle (e.g., 350 to 10)
-                     if (pAngle >= barrierStart || pAngle <= barrierEnd) {
-                          collided = true;
-                     }
-                 }
-
+                // Handle angle wrap-around check cleanly
+                if (start <= end) { // Barrier does NOT wrap around 0/360
+                    if (pAngle >= start && pAngle <= end) collided = true;
+                } else { // Barrier DOES wrap around 0/360 (e.g., 350 to 10)
+                    if (pAngle >= start || pAngle <= end) collided = true;
+                }
 
                 if (collided) {
                     if (playerState.isFireball) {
-                        // Destroy barrier
+                        // Destroy barrier segment
+                        createBarrierBreakEffect(b); // Visual effect
                         barriers.splice(i, 1);
-                        // Add burst effect
-                        let themeColors = getCurrentThemeColors();
-                        let x = playerOrbitRadius * cos(pAngle);
-                        let y = playerOrbitRadius * sin(pAngle);
-                         for (let k = 0; k < 15; k++) {
-                            addParticle(x, y, random(-4, 4), random(-4, 4),
-                                random(5, 15) * gameScaleFactor, Config.powerupTypes.FIREBALL.color, random(40, 80));
-                        }
-                        // Don't trigger game over, continue checking other barriers
+                        // Potentially add sound effect here
                     } else {
-                        // Game Over
                         gameOver();
-                        return; // Stop checking once collision occurs
+                        return; // Exit collision check immediately
                     }
                 }
             }
         }
     }
 
+     function createBarrierBreakEffect(barrier) {
+         let colors = getCurrentThemeColors();
+         let breakAngle = playerAngle; // Angle where barrier broke
+         let breakDist = barrier.distance;
+         let particleColor = Config.powerupTypes.FIREBALL.color;
+         for (let k = 0; k < 15; k++) {
+             let angleOffset = random(-20, 20);
+             let distOffset = random(-barrier.thickness, barrier.thickness);
+             let x = (breakDist + distOffset) * cos(breakAngle + angleOffset);
+             let y = (breakDist + distOffset) * sin(breakAngle + angleOffset);
+             addParticle(x, y, random(-4, 4), random(-4, 4),
+                         random(5, 15) * gameScaleFactor, particleColor, 1.0);
+         }
+     }
+
     function checkPowerupCollisions() {
-        let playerHitRadius = (Config.playerSizeBase * gameScaleFactor) * 0.5; // Slightly larger hitbox for powerups
+        let playerHitRadius = Config.playerSizeBase * gameScaleFactor * 0.6; // Generous hitbox for powerups
 
         for (let i = powerups.length - 1; i >= 0; i--) {
             let p = powerups[i];
             let distToPowerup = abs(p.distance - playerOrbitRadius);
             let angleDiff = abs(p.angle - playerAngle);
-            angleDiff = min(angleDiff, 360 - angleDiff); // Handle wrap-around difference
+            angleDiff = min(angleDiff, 360 - angleDiff); // Correct angle difference calculation
 
-            let collisionMarginDist = (p.size / 2) + playerHitRadius;
-            // Check distance and angle proximity
-            if (distToPowerup < collisionMarginDist && angleDiff < (p.size / playerOrbitRadius) * 90) { // Check angle based on size
+            // Collision check: distance + angle proximity
+            // Angle proximity check is rough: is player angle within +/- angular size of powerup?
+            let angularSize = degrees(atan(p.size / p.distance)) * 2; // Approx angular size
+            if (distToPowerup < playerHitRadius + p.size / 2 && angleDiff < angularSize) {
                 activatePowerup(p);
-                powerups.splice(i, 1); // Remove collected powerup
-                return; // Only collect one powerup per frame check
+                powerups.splice(i, 1);
+                return; // Process one pickup per frame
             }
         }
     }
@@ -688,50 +623,53 @@ let canvasWidth, canvasHeight;
     // --- Game State Changers ---
 
     function activatePowerup(powerup) {
-         let now = millis();
-         let x = width / 2; // Position for text feedback
-         let y = height * 0.2;
+        let now = millis();
+        let x = centerX; // Position for text feedback (center screen)
+        let y = centerY * 0.5; // Position slightly above center
 
         switch (powerup.type) {
             case Config.powerupTypes.TRANSPARENCY.id:
                 playerState.isTransparent = true;
                 playerState.transparencyEndTime = now + powerup.duration;
-                playerState.visualAlpha = 150; // Initial visual feedback
-                 addFloatingText("Transparency!", x, y, powerup.color);
+                playerState.isFireball = false; // Cancel fireball if active
+                addFloatingText("Ghost!", x, y, powerup.color);
                 break;
             case Config.powerupTypes.BONUS_TIME.id:
-                startTime += powerup.bonus; // Effectively adds time by pushing start time back
-                 addFloatingText(`+${powerup.bonus / 1000} Sec!`, x, y, powerup.color);
+                startTime += powerup.bonus; // Add time by adjusting start
+                addFloatingText(`+${powerup.bonus / 1000}s!`, x, y, powerup.color);
                 break;
             case Config.powerupTypes.FIREBALL.id:
                 playerState.isFireball = true;
                 playerState.fireballEndTime = now + powerup.duration;
-                 addFloatingText("Fireball!", x, y, powerup.color);
+                playerState.isTransparent = false; // Cancel transparency
+                addFloatingText("Inferno!", x, y, powerup.color);
                 break;
         }
-        // Add particle effect on pickup
-        let pX = playerOrbitRadius * cos(playerAngle);
-        let pY = playerOrbitRadius * sin(playerAngle);
-         for (let k = 0; k < 20; k++) {
-            addParticle(pX, pY, random(-3, 3), random(-3, 3),
-                random(4, 12) * gameScaleFactor, powerup.color, random(50, 100));
-        }
+        // Particle effect on pickup
+        createPickupEffect(powerup.color);
+        // Add sound effect here potentially
     }
 
+     function createPickupEffect(color) {
+         let pX = playerOrbitRadius * cos(playerAngle);
+         let pY = playerOrbitRadius * sin(playerAngle);
+         for (let k = 0; k < 25; k++) {
+             let angle = random(360);
+             let speed = random(1, 4);
+             addParticle(pX, pY, cos(angle) * speed, sin(angle) * speed,
+                         random(4, 12) * gameScaleFactor, color, 1.0);
+         }
+     }
 
     function gameOver() {
         if (gameState === 'gameOver') return; // Prevent multiple calls
         gameState = 'gameOver';
+        // Add sound effect?
 
-        // Add explosion effect at player location
-        let themeColors = getCurrentThemeColors();
-        let x = playerOrbitRadius * cos(playerAngle);
-        let y = playerOrbitRadius * sin(playerAngle);
-        for (let i = 0; i < 40; i++) {
-             addParticle( x, y, random(-4, 4), random(-4, 4), random(5, 20) * gameScaleFactor,
-                         themeColors.particles || [255, 200, 100], random(60, 120));
-        }
+        // Create explosion effect
+        createPlayerExplosion();
 
+        // Update High Scores
         if (score > sessionHighScore) sessionHighScore = score;
         if (score > lifetimeHighScore) {
             lifetimeHighScore = score;
@@ -739,1043 +677,681 @@ let canvasWidth, canvasHeight;
         }
     }
 
-    function startGame() {
-        resetGame();
-        initializeGameElements(); // Re-initialize elements that depend on dimensions/theme
-        gameState = 'playing';
-        startTime = millis();
+     function createPlayerExplosion() {
+         let colors = getCurrentThemeColors();
+         let x = playerOrbitRadius * cos(playerAngle);
+         let y = playerOrbitRadius * sin(playerAngle);
+         for (let i = 0; i < 50; i++) { // More particles for game over
+              let angle = random(360);
+              let speed = random(1, 6);
+              let explosionColor = random() < 0.5 ? colors.player : colors.particles; // Mix colors
+              addParticle( x, y, cos(angle) * speed, sin(angle) * speed, random(4, 18) * gameScaleFactor,
+                          explosionColor, 1.0);
+         }
+     }
 
-        // Optional: Try fullscreen/orientation lock again on game start
-        // if (isMobile() && !document.fullscreenElement) { /* ... requestFullscreen ... */ }
-        // if (isMobile()) { /* ... screen.orientation.lock ... */ }
+
+    function startGame() {
+        resetGame(); // Reset all states
+        initializeElements(); // Re-init visuals if needed (e.g., if resize occurred)
+        gameState = 'playing';
+        // Optional: Attempt fullscreen/orientation lock
+        // tryEnterFullscreen();
+        // tryLockOrientation();
     }
 
     function resetGame() {
+        // Reset Core State
         score = 0;
+        startTime = millis();
         firstWallSpawned = false;
-        barriers = [];
-        powerups = [];
-        particles = [];
-        playerTrail = [];
-        floatingTexts = [];
+        lastFrameTime = millis(); // Reset delta time base
 
         // Reset Player
         playerAngle = 0;
-        playerTargetAngle = 0;
         playerRotationSpeed = 0;
         playerWalkFrame = 0;
         playerFacingLeft = false;
+        playerTrail = [];
         playerState = { isTransparent: false, transparencyEndTime: 0, isFireball: false, fireballEndTime: 0, visualAlpha: 255 };
 
+        // Reset Elements
+        barriers = [];
+        powerups = [];
+        particles = []; // Clear existing particles
+        floatingTexts = [];
 
-        // Reset Difficulty/Timing
-        updateDifficulty(); // Set initial difficulty based on score 0
-        startTime = millis(); // Reset timer start
+        // Reset Difficulty
+        currentDifficulty = {}; // Clear old values
+        updateDifficulty(); // Set initial difficulty for score 0
 
-        // Reset theme blending
-        targetTheme = floor(random(Config.colorThemes.length)); // Start with a random theme
-        currentTheme = targetTheme;
-        themeBlendFactor = 1;
+        // Reset Theme
+        targetThemeIndex = floor(random(Config.colorThemes.length));
+        currentThemeIndex = targetThemeIndex;
+        themeBlendFactor = 1.0;
+
+         // Reset Input State
+         inputState = { left: false, right: false, holdStartLeft: null, holdStartRight: null };
     }
 
-    function initializeGameElements() {
-        updateDimensions(); // Ensure dimensions are current
-        createBackgroundLayers();
-        createForestElements();
-        createCloudElements();
-        createSpiritGuides();
-         // Reset particle array
-         particles = [];
+    function initializeElements() {
+        // Create elements that *don't* reset every game, like background stuff (if any)
+        // Or re-create elements that depend heavily on initial screen dimensions if needed after resize
+         createSpiritGuides(); // Example: recreate these based on new dimensions
+         particles = []; // Ensure particles are clear on full init
     }
 
 
     // --- Drawing Functions ---
 
-    function drawBackground(themeColors) {
-        let gradientStart = color(themeColors.bg[0], themeColors.bg[1], themeColors.bg[2]);
-        let gradientEnd = color(themeColors.bgGradient[0], themeColors.bgGradient[1], themeColors.bgGradient[2]);
-
-        // Simple gradient background filling the whole canvas
-        push();
-        translate(-centerX, -centerY); // Translate relative to canvas 0,0
+    function drawBackground(colors) {
+        let gradStart = color(colors.bg[0], colors.bg[1], colors.bg[2]);
+        let gradEnd = color(colors.bgGradient[0], colors.bgGradient[1], colors.bgGradient[2]);
         noStroke();
-         for (let i = 0; i <= height; i++) {
-             let inter = map(i, 0, height, 0, 1);
-             let c = lerpColor(gradientStart, gradientEnd, inter);
-             stroke(c);
-             line(0, i, width, i);
-         }
-         pop();
+        for (let i = 0; i <= height; i++) {
+            let inter = map(i, 0, height, 0, 1);
+            stroke(lerpColor(gradStart, gradEnd, inter));
+            line(0, i, width, i);
+        }
+        noStroke(); // Reset stroke
+    }
 
-
-        // Optional: Draw background layers (ensure they scale correctly)
-        for (let layer of backgroundLayers) {
-            push();
-            rotate(frameCount * layer.speed + layer.offset);
-            let layerSize = max(width, height) * 2.5 * layer.depth; // Scale layer size
-            let layerAlpha = map(layer.depth, 0.2, 0.8, 80, 20);
-            noStroke();
-            fill(lerpColor(gradientStart, gradientEnd, layer.depth * 1.5), layerAlpha); // Darker layers
-            ellipse(0, 0, layerSize, layerSize);
-            pop();
+    function drawPlayerTrail(colors) {
+        noStroke();
+        let trailColor = playerState.isFireball ? Config.powerupTypes.FIREBALL.color : colors.player;
+        for (let p of playerTrail) {
+             let trailX = p.distance * cos(p.angle);
+             let trailY = p.distance * sin(p.angle);
+             fill(trailColor[0], trailColor[1], trailColor[2], p.alpha * 0.7 * (playerState.visualAlpha / 255));
+             ellipse(trailX, trailY, p.size, p.size);
         }
     }
 
-     function drawForestElements(themeColors) {
-        // Calculate parallax based on a reference angle (e.g., player angle)
-         // These are drawn in the rotated world space
-         let playerRad = radians(playerAngle);
-         let parallaxFactor = minDimension * 0.1; // Adjust parallax intensity
-
-         for (let tree of forestElements) {
-            let parallaxX = -sin(playerRad) * tree.depth * parallaxFactor;
-            let parallaxY = cos(playerRad) * tree.depth * parallaxFactor;
-
-            push();
-            // Position relative to center, apply parallax
-             translate(tree.worldX + parallaxX, tree.worldY + parallaxY);
-             rotate(tree.currentSway); // Use pre-calculated sway
-
-            // Draw tree (using base size scaled)
-            let size = tree.baseSize * gameScaleFactor;
-             noStroke();
-             fill(100, 70, 40, 150); // Trunk
-             rect(0, size * 0.1, size * 0.2, size * 0.8);
-             fill(themeColors.forest[0], themeColors.forest[1], themeColors.forest[2], 180); // Foliage
-
-              if (tree.type === 0) ellipse(0, -size * 0.3, size * 0.7, size * 0.7);
-              else if (tree.type === 1) triangle(-size * 0.4, size * 0.1, size * 0.4, size * 0.1, 0, -size * 0.7);
-              else { // Bushy
-                  ellipse(0, -size * 0.2, size * 0.5, size * 0.5);
-                  ellipse(-size * 0.2, -size * 0.4, size * 0.4, size * 0.4);
-                  ellipse(size * 0.2, -size * 0.4, size * 0.4, size * 0.4);
-                  ellipse(0, -size * 0.6, size * 0.3, size * 0.3);
-              }
-            pop();
-         }
-
-         // Draw Clouds (Also in rotated world space)
-         for (let cloud of cloudElements) {
-             let parallaxX = -sin(playerRad) * cloud.depth * parallaxFactor * 1.5; // Clouds move more
-             let parallaxY = cos(playerRad) * cloud.depth * parallaxFactor * 1.5;
-
-             push();
-             // Position relative to center, apply parallax
-             translate(cloud.x + parallaxX, cloud.y + parallaxY);
-
-             // Draw cloud shapes
-             noStroke();
-             fill(themeColors.clouds[0], themeColors.clouds[1], themeColors.clouds[2], themeColors.clouds[3]);
-             let w = cloud.baseWidth * gameScaleFactor;
-             let h = cloud.baseHeight * gameScaleFactor;
-             ellipse(0, 0, w * 0.5, h);
-             ellipse(w * 0.3, 0, w * 0.4, h * 0.9);
-             ellipse(-w * 0.3, 0, w * 0.4, h * 0.8);
-             ellipse(w * 0.1, -h * 0.2, w * 0.3, h * 0.6);
-             pop();
-         }
-    }
-
-
-    function drawSpiritGuides(themeColors) {
-        // Drawn in rotated world space
-        for (let spirit of spiritGuides) {
-            let angle = spirit.angle + frameCount * spirit.speed;
-            let distance = spirit.baseDistance * gameScaleFactor; // Scale distance
-            distance += sin(frameCount * spirit.pulseSpeed + spirit.phaseOffset) * 10 * gameScaleFactor; // Scaled bobbing
-
-            let x = distance * cos(angle);
-            let y = distance * sin(angle);
-            let size = spirit.baseSize * gameScaleFactor; // Scale size
-
-            push();
-            translate(x, y);
-            let glowSize = size * (1.5 + sin(frameCount * 2 + spirit.phaseOffset) * 0.2);
-            let glowAlpha = 100 + sin(frameCount * 4 + spirit.phaseOffset) * 50;
-            fill(themeColors.spirits[0], themeColors.spirits[1], themeColors.spirits[2], glowAlpha);
-            noStroke();
-            ellipse(0, 0, glowSize, glowSize);
-            fill(255, 255, 255, 200); // Core
-            ellipse(0, 0, size, size);
-            pop();
-
-            // Emit particles (less frequently)
-            if (random() < 0.03) {
-                addParticle(x, y, random(-0.5, 0.5), random(-0.5, 0.5),
-                            random(3, 8) * gameScaleFactor, themeColors.particles, random(30, 60));
-            }
-        }
-    }
-
-    function drawPowerups(themeColors) {
-        // Drawn in rotated world space
-        push();
-        for (let p of powerups) {
-            let x = p.distance * cos(p.angle);
-            let y = p.distance * sin(p.angle);
-            let size = p.size; // Already scaled
-
-            push();
-            translate(x, y);
-            rotate(p.rotation); // Apply visual rotation
-
-            // Outer glow
-            noFill();
-            strokeWeight(size * 0.2); // Thicker ring based on size
-            stroke(p.color[0], p.color[1], p.color[2], p.alpha * 0.5); // Glow color
-            ellipse(0, 0, size * 1.2, size * 1.2);
-
-            // Main ring
-            strokeWeight(size * 0.15);
-            stroke(p.color[0], p.color[1], p.color[2], p.alpha); // Solid color
-            ellipse(0, 0, size, size);
-
-            // Optional: Inner symbol or core
-             fill(255, p.alpha);
-             noStroke();
-             textSize(size * 0.5);
-             textStyle(BOLD);
-             //text(p.symbol, 0, 0); // Display symbol if needed
-
-            pop();
-        }
-        pop();
-    }
-
-    function drawBarriers(themeColors) {
-        // Drawn in rotated world space
-        noFill();
-        strokeCap(PROJECT); // Or SQUARE for solid look
-
-        for (let b of barriers) {
-            if (b.distance < -b.thickness) continue; // Don't draw if completely passed center
-
-            let innerRadius = max(0, b.distance - b.thickness / 2);
-            let outerRadius = b.distance + b.thickness / 2;
-
-            let barrierColor = color(themeColors.barriers[0], themeColors.barriers[1], themeColors.barriers[2]);
-            let barrierAlpha = themeColors.barriers[3] || 200; // Use alpha from theme or default
-
-             // Use beginShape/endShape for filled arc segment
-             fill(red(barrierColor), green(barrierColor), blue(barrierColor), b.alpha * (barrierAlpha / 255) * 0.6); // Fill with transparency
-             stroke(red(barrierColor), green(barrierColor), blue(barrierColor), b.alpha * (barrierAlpha / 255)); // Outline
-             strokeWeight(1.5 * gameScaleFactor); // Scaled stroke weight
-
-             // Draw the arc segment
-             beginShape();
-             // Outer edge vertices
-             for (let a = b.startAngle; a < b.endAngle; a += 5) { // Draw in steps
-                 vertex(outerRadius * cos(a), outerRadius * sin(a));
-             }
-              vertex(outerRadius * cos(b.endAngle), outerRadius * sin(b.endAngle)); // Ensure end point
-
-              // Inner edge vertices (in reverse)
-              vertex(innerRadius * cos(b.endAngle), innerRadius * sin(b.endAngle));
-              for (let a = b.endAngle; a > b.startAngle; a -= 5) { // Draw in steps
-                 vertex(innerRadius * cos(a), innerRadius * sin(a));
-             }
-             vertex(innerRadius * cos(b.startAngle), innerRadius * sin(b.startAngle)); // Ensure start point
-             endShape(CLOSE);
-
-        }
-        noFill(); // Reset fill
-    }
-
-
-    function drawPlayer(themeColors) {
-        // Player is drawn at (playerOrbitRadius, 0) in the NON-ROTATED space relative to the center
-        // Since the world is rotated by -playerAngle, drawing the player at the origin
-        // after the world rotation effectively places them correctly.
-        // However, we also need to rotate the player sprite itself to face outward.
-
-        // Draw player trail first (drawn in rotated world)
-        for (let point of playerTrail) {
-             let trailX = point.distance * cos(point.angle);
-             let trailY = point.distance * sin(point.angle);
-             noStroke();
-             // Use fireball color for trail if active
-             let trailColor = playerState.isFireball ? Config.powerupTypes.FIREBALL.color : themeColors.player;
-             fill(trailColor[0], trailColor[1], trailColor[2], point.alpha * 0.6 * (playerState.visualAlpha / 255)); // Apply transparency alpha
-             ellipse(trailX, trailY, point.size, point.size);
-        }
-
-
-        // Player position is always at playerOrbitRadius distance
+    function drawPlayer(colors) {
+        // Player origin is center, drawn at orbit radius and angle
         let x = playerOrbitRadius * cos(playerAngle);
         let y = playerOrbitRadius * sin(playerAngle);
         let size = Config.playerSizeBase * gameScaleFactor;
 
         push();
-        translate(x, y); // Move to player's position in the rotated world
-        rotate(playerAngle + 90); // Rotate sprite to face outward
+        translate(x, y);
+        rotate(playerAngle + 90); // Orient sprite outward
 
-        // 2) Animated Stick Figure Drawing
-        let baseColor = color(themeColors.player[0], themeColors.player[1], themeColors.player[2], playerState.visualAlpha);
-        let stickColor = color(40, 40, 40, playerState.visualAlpha * 0.8);
-        let stickWeight = 2.5 * gameScaleFactor;
+        // --- Stick Figure Drawing (Requirement 2) ---
+        let baseC = color(colors.player[0], colors.player[1], colors.player[2], playerState.visualAlpha);
+        let stickC = color(40, 40, 40, playerState.visualAlpha * 0.8);
+        let stickW = max(1.5, 2.5 * gameScaleFactor); // Ensure min weight
 
-        // Fireball Effect - Override colors and add glow
+        // Fireball Effect Overlay
         if (playerState.isFireball) {
-             let fireColor = Config.powerupTypes.FIREBALL.color;
-             baseColor = color(fireColor[0], fireColor[1], fireColor[2], playerState.visualAlpha);
-             stickColor = color(max(0, fireColor[0]-100), max(0, fireColor[1]-80), max(0, fireColor[2]-50), playerState.visualAlpha * 0.8);
+            let fireC = Config.powerupTypes.FIREBALL.color;
+            baseC = color(fireC[0], fireC[1], fireC[2], playerState.visualAlpha);
+            stickC = color(max(0, fireC[0] - 80), max(0, fireC[1] - 60), max(0, fireC[2] - 40), playerState.visualAlpha);
 
-             // Fireball glow
-             let glowSize = size * (1.8 + sin(millis() * 0.6) * 0.3);
-             let glowAlpha = 100 + sin(millis()*0.7) * 50;
+            // Pulsing Glow
+            let glowSize = size * (1.6 + sin(millis() * 0.006) * 0.4); // Use ms for smoother animation
+            let glowAlpha = 120 + sin(millis() * 0.007) * 60;
+            noStroke();
+            fill(fireC[0], fireC[1], fireC[2], glowAlpha * (playerState.visualAlpha / 255));
+            ellipse(0, 0, glowSize, glowSize);
+             // Emit particles when fireball
+             if(random() < 0.2){
+                 addParticle(x, y, random(-1,1), random(-1,1), random(2,5)*gameScaleFactor, fireC, 0.5);
+             }
+        } else {
+             // Subtle standard glow
+             let glowSize = size * 1.3;
              noStroke();
-             fill(fireColor[0], fireColor[1], fireColor[2], glowAlpha * (playerState.visualAlpha / 255));
+             fill(colors.player[0], colors.player[1], colors.player[2], 40 * (playerState.visualAlpha / 255));
              ellipse(0, 0, glowSize, glowSize);
         }
-         // General subtle glow even when not fireball
-         else {
-            let glowSize = size * (1.4 + sin(millis() * 0.2) * 0.1);
-             noStroke();
-             fill(themeColors.player[0], themeColors.player[1], themeColors.player[2], 60 * (playerState.visualAlpha / 255));
-             ellipse(0, 0, glowSize, glowSize);
-         }
 
+        // Actual Stick Figure
+        scale(size / 50); // Base drawing on 50 unit height
+        scale(playerFacingLeft ? -1 : 1, 1); // Mirroring
 
-        // Scale stick figure to size
-        scale(size / 50); // Scale based on a reference design size (e.g., 50 units tall)
-
-        // Mirror if facing left
-        scale(playerFacingLeft ? -1 : 1, 1);
-
-        // --- Stick Figure Drawing ---
-        stroke(stickColor);
-        strokeWeight(stickWeight);
+        stroke(stickC);
+        strokeWeight(stickW / (size / 50)); // Adjust stroke weight based on scale
         strokeCap(ROUND);
         strokeJoin(ROUND);
 
-        let legSwing = 0;
-        let armSwing = 0;
-        let headBob = 0;
-
-        if (playerWalkFrame > 0) { // If walking/moving
-            let walkPhase = playerWalkFrame * PI / 2; // Map 0-4 cycle to 0-2PI
-            legSwing = sin(walkPhase) * 10; // Max swing of 10 units
-            armSwing = cos(walkPhase) * 8; // Max swing of 8 units
-            headBob = (cos(walkPhase * 2) -1) * -0.8; // Bobbing effect (slight up/down)
-        }
+        let walkPhase = playerWalkFrame * PI / 2;
+        let legSwing = playerWalkFrame > 0 ? sin(walkPhase) * 10 : 0;
+        let armSwing = playerWalkFrame > 0 ? cos(walkPhase) * 8 : 0;
+        let headBob = playerWalkFrame > 0 ? (1 - cos(walkPhase * 2)) * 0.8 : 0; // Bob up and down
 
         // Legs
-        line(0, 5, -5 - legSwing, 18); // Left upper leg (Hip to knee)
-        line(-5 - legSwing, 18, -4 - legSwing, 25); // Left lower leg (Knee to ankle)
-
-        line(0, 5, 5 + legSwing, 18); // Right upper leg
-        line(5 + legSwing, 18, 4 + legSwing, 25); // Right lower leg
-
+        line(0, 5, -5 - legSwing, 18); line(-5 - legSwing, 18, -4 - legSwing, 25);
+        line(0, 5, 5 + legSwing, 18); line(5 + legSwing, 18, 4 + legSwing, 25);
         // Torso
-        line(0, 5, 0, -10); // Simple vertical torso
-
+        line(0, 5, 0, -10);
         // Arms
-        line(0, -8, -6 - armSwing, 0); // Left upper arm (Shoulder to elbow)
-        line(-6 - armSwing, 0, -8 - armSwing, 8); // Left lower arm (Elbow to hand)
-
-        line(0, -8, 6 + armSwing, 0); // Right upper arm
-        line(6 + armSwing, 0, 8 + armSwing, 8); // Right lower arm
-
+        line(0, -8, -6 - armSwing, 0); line(-6 - armSwing, 0, -8 - armSwing, 8);
+        line(0, -8, 6 + armSwing, 0); line(6 + armSwing, 0, 8 + armSwing, 8);
         // Head
-        fill(baseColor); // Use base color for head fill
-        stroke(stickColor); // Outline for head
-        strokeWeight(stickWeight * 0.8);
-        ellipse(0, -16 + headBob, 12, 12); // Head positioned above torso
+        fill(baseC);
+        stroke(stickC);
+        strokeWeight(stickW * 0.8 / (size / 50));
+        ellipse(0, -16 + headBob, 12, 12);
 
-        pop(); // Restore translation/rotation
+        pop(); // Restore transformations
     }
 
+     function drawBarriers(colors) {
+        noFill();
+        strokeCap(PROJECT);
+        let barrierColor = color(colors.barriers[0], colors.barriers[1], colors.barriers[2]);
+        let barrierAlpha = colors.barriers[3] || 200;
 
-    function drawHUD(themeColors) {
-        push(); // Isolate HUD drawing
-        // Score display
-        textFont('Mali');
-        textStyle(BOLD);
-        textSize(28 * gameScaleFactor); // Slightly smaller HUD text
-        textAlign(RIGHT, TOP);
-        fill(20, 20, 20, 120); // Shadow
-        text(`Time: ${score.toFixed(1)}s`, width - 18, 22);
-        fill(255, 240, 220, 230); // Text
-        text(`Time: ${score.toFixed(1)}s`, width - 20, 20);
+        for (let b of barriers) {
+             if (b.distance < -b.thickness) continue;
 
-        // Theme name
-        textAlign(LEFT, TOP);
-        textFont('Quicksand');
-        textStyle(NORMAL);
-        textSize(20 * gameScaleFactor);
-        fill(20, 20, 20, 100); // Shadow
-        text(themeColors.name, 22, 22);
-        fill(themeColors.spirits[0], themeColors.spirits[1], themeColors.spirits[2], 230); // Text
-        text(themeColors.name, 20, 20);
+             let innerRadius = max(0, b.distance - b.thickness / 2);
+             let outerRadius = b.distance + b.thickness / 2;
 
-        // Power-up Timer Display
-        textAlign(CENTER, TOP);
-        textSize(18 * gameScaleFactor);
-        let timerY = 25;
-        if (playerState.isTransparent) {
-             let timeLeft = (playerState.transparencyEndTime - millis()) / 1000;
-             fill(Config.powerupTypes.TRANSPARENCY.color[0], Config.powerupTypes.TRANSPARENCY.color[1], Config.powerupTypes.TRANSPARENCY.color[2], 220);
-             text(`Transparent: ${max(0, timeLeft).toFixed(1)}s`, width / 2, timerY);
-             timerY += 22 * gameScaleFactor;
+             fill(red(barrierColor), green(barrierColor), blue(barrierColor), b.alpha * (barrierAlpha / 255) * 0.7); // Fill
+             stroke(red(barrierColor), green(barrierColor), blue(barrierColor), b.alpha * (barrierAlpha / 255)); // Outline
+             strokeWeight(max(1, 1.5 * gameScaleFactor));
+
+             // Draw arc segment robustly
+             // Handle wrap-around by potentially drawing two arcs or using angle logic
+             let start = b.startAngle;
+             let end = b.endAngle;
+
+             beginShape();
+             // Outer arc
+             if (start <= end) { // No wrap
+                 for (let a = start; a <= end; a += 4) vertex(outerRadius * cos(a), outerRadius * sin(a));
+                 vertex(outerRadius * cos(end), outerRadius * sin(end));
+             } else { // Wraps around
+                  for (let a = start; a < 360; a += 4) vertex(outerRadius * cos(a), outerRadius * sin(a));
+                  for (let a = 0; a <= end; a += 4) vertex(outerRadius * cos(a), outerRadius * sin(a));
+                  vertex(outerRadius * cos(end), outerRadius * sin(end));
+             }
+             // Inner arc (reverse order)
+              vertex(innerRadius * cos(end), innerRadius * sin(end));
+              if (start <= end) { // No wrap
+                  for (let a = end; a >= start; a -= 4) vertex(innerRadius * cos(a), innerRadius * sin(a));
+                  vertex(innerRadius * cos(start), innerRadius * sin(start));
+              } else { // Wraps around
+                   for (let a = end; a > 0; a -= 4) vertex(innerRadius * cos(a), innerRadius * sin(a));
+                   for (let a = 360; a >= start; a -= 4) vertex(innerRadius * cos(a), innerRadius * sin(a));
+                    vertex(innerRadius * cos(start), innerRadius * sin(start));
+              }
+
+             endShape(CLOSE);
         }
-         if (playerState.isFireball) {
-             let timeLeft = (playerState.fireballEndTime - millis()) / 1000;
-              fill(Config.powerupTypes.FIREBALL.color[0], Config.powerupTypes.FIREBALL.color[1], Config.powerupTypes.FIREBALL.color[2], 220);
-             text(`Fireball: ${max(0, timeLeft).toFixed(1)}s`, width / 2, timerY);
-         }
-
-        pop(); // Restore text styles
+        noFill();
     }
 
-     function drawFloatingTexts() {
+    function drawPowerups(colors) {
+        // Uses world coordinates (drawn inside rotated push/pop)
+        noFill();
+        for (let p of powerups) {
+             let x = p.distance * cos(p.angle);
+             let y = p.distance * sin(p.angle);
+             let size = p.size;
+
+             push();
+             translate(x, y);
+             rotate(p.rotation);
+
+             // Use specific powerup color
+             let powerupColor = p.color || [255, 255, 255];
+
+             // Outer Glow
+             strokeWeight(size * 0.25);
+             stroke(powerupColor[0], powerupColor[1], powerupColor[2], p.alpha * 0.4);
+             ellipse(0, 0, size * 1.15, size * 1.15);
+
+             // Main Ring
+             strokeWeight(size * 0.18);
+             stroke(powerupColor[0], powerupColor[1], powerupColor[2], p.alpha);
+             ellipse(0, 0, size, size);
+             pop();
+        }
+        noFill(); // Reset
+    }
+
+
+    function drawHUD(colors) {
+        push();
+        // Score
+        textFont('Mali'); textStyle(BOLD);
+        let scoreSize = max(18, 28 * gameScaleFactor);
+        textSize(scoreSize);
+        fill(20, 20, 20, 130);
+        textAlign(RIGHT, TOP);
+        text(`Score: ${score.toFixed(1)}`, width - 18, 18); // Use score var
+        fill(255, 240, 220, 230);
+        text(`Score: ${score.toFixed(1)}`, width - 20, 16);
+
+        // Theme Name
+        textFont('Quicksand'); textStyle(NORMAL);
+        let themeNameSize = max(14, 20 * gameScaleFactor);
+        textSize(themeNameSize);
+        textAlign(LEFT, TOP);
+        fill(20, 20, 20, 110);
+        text(colors.name, 22, 18);
+        fill(colors.spirits[0], colors.spirits[1], colors.spirits[2], 230);
+        text(colors.name, 20, 16);
+
+        // Power-up Timers
+        textAlign(CENTER, TOP);
+        let timerSize = max(14, 18 * gameScaleFactor);
+        textSize(timerSize);
+        let timerY = 20; // Start Y pos
+        let timerLineHeight = timerSize * 1.3;
+
+        if (playerState.isTransparent) {
+            let timeLeft = (playerState.transparencyEndTime - millis()) / 1000;
+            fill(Config.powerupTypes.TRANSPARENCY.color[0], Config.powerupTypes.TRANSPARENCY.color[1], Config.powerupTypes.TRANSPARENCY.color[2], 220);
+            text(`Ghost: ${max(0, timeLeft).toFixed(1)}s`, width / 2, timerY);
+            timerY += timerLineHeight;
+        }
+        if (playerState.isFireball) {
+            let timeLeft = (playerState.fireballEndTime - millis()) / 1000;
+            fill(Config.powerupTypes.FIREBALL.color[0], Config.powerupTypes.FIREBALL.color[1], Config.powerupTypes.FIREBALL.color[2], 220);
+            text(`Inferno: ${max(0, timeLeft).toFixed(1)}s`, width / 2, timerY);
+        }
+        pop();
+    }
+
+     function drawFloatingTexts(dtFactor) {
         push();
         textAlign(CENTER, CENTER);
-        textFont('Mali');
-        textStyle(BOLD);
+        textFont('Mali'); textStyle(BOLD);
+        let textSizeBase = max(16, 24 * gameScaleFactor);
         for (let ft of floatingTexts) {
-            textSize(24 * gameScaleFactor);
+            textSize(textSizeBase * (1 + (255 - ft.alpha)/255 * 0.5) ); // Grow slightly as it fades
             fill(ft.color[0], ft.color[1], ft.color[2], ft.alpha);
             text(ft.text, ft.x, ft.y);
         }
         pop();
     }
 
-    function drawStoryHints(themeColors) {
-        // Simplified hint display
-        if (frameCount % 400 === 0 || currentStoryPhrase === "") { // Show hints less often
+     function drawStoryHints(dtFactor, colors) {
+        storyHintTimer += dtFactor;
+        if (storyHintTimer > Config.hintInterval) {
             currentStoryPhrase = random(Config.storyPhrases);
-            storyTextOpacity = 0;
-            storyDisplayTime = 0;
+            storyHintOpacity = 0;
+            storyHintTimer = 0; // Reset timer
         }
-        storyDisplayTime++;
-        if (storyDisplayTime < 60) storyTextOpacity = min(storyTextOpacity + 3, 180);
-        else if (storyDisplayTime > 200) storyTextOpacity = max(storyTextOpacity - 3, 0); // Fade out faster
 
-        if (storyTextOpacity > 0) {
+        if (storyHintTimer < Config.hintDuration) { // Fade in and stay visible
+            storyHintOpacity = min(180, storyHintOpacity + 4 * dtFactor);
+        } else if (storyHintTimer > Config.hintInterval - (Config.hintDuration / 2)) { // Fade out before next hint
+            storyHintOpacity = max(0, storyHintOpacity - 5 * dtFactor);
+        }
+
+
+        if (storyHintOpacity > 5) {
             push();
             textFont('Mali');
-            textAlign(CENTER, BOTTOM); // Position at bottom center
-            textSize(22 * gameScaleFactor);
-            fill(20, 20, 20, storyTextOpacity * 0.6); // Shadow
-            text(currentStoryPhrase, width / 2 + 1, height - 18);
-            fill(255, 255, 250, storyTextOpacity); // Text
-            text(currentStoryPhrase, width / 2, height - 20);
+            textAlign(CENTER, BOTTOM);
+            let hintSize = max(16, 22 * gameScaleFactor);
+            textSize(hintSize);
+            fill(20, 20, 20, storyHintOpacity * 0.7);
+            text(currentStoryPhrase, width / 2 + 1, height - 18); // Shadow
+            fill(255, 255, 250, storyHintOpacity);
+            text(currentStoryPhrase, width / 2, height - 20); // Text
             pop();
         }
     }
 
-    // --- Screen Drawing Functions (Intro, Story, Game Over) ---
+    // --- Screen Drawing Functions ---
 
-    function drawIntroScreen(themeColors) {
-        // Use the adaptive gradient background function
-         drawBackground(themeColors); // Draw the standard game background
-
+    function drawIntroScreen(colors) {
+        // Background is already drawn by main draw loop
+        // Draw animated elements relative to center
         push();
-        translate(centerX, centerY); // Work relative to center
-         // Animated elements (simplified)
-         noFill();
-         for (let i = 0; i < 4; i++) {
-             let size = minDimension * (0.2 + i * 0.15) + sin(frameCount * (0.5 + i*0.1) + i) * 15 * gameScaleFactor;
-             stroke(themeColors.spirits[0], themeColors.spirits[1], themeColors.spirits[2], 100 - i * 15);
-             strokeWeight(2 + (4-i)*0.5 * gameScaleFactor);
-             ellipse(0, 0, size, size);
-         }
-        pop(); // Restore translate
+        translate(centerX, centerY);
+        noFill();
+        for (let i = 0; i < 4; i++) {
+            let sizeFactor = 0.2 + i * 0.15;
+            let animSpeed = 0.0005 + i * 0.0001;
+            let animOffset = i * PI;
+            let size = minDimension * sizeFactor + sin(millis() * animSpeed + animOffset) * 15 * gameScaleFactor;
+            stroke(colors.spirits[0], colors.spirits[1], colors.spirits[2], 100 - i * 15);
+            strokeWeight(max(1, (2 + (4 - i) * 0.5) * gameScaleFactor));
+            ellipse(0, 0, size, size);
+        }
+        pop();
 
+        // Draw UI text & buttons (screen coords)
+        push();
+        textAlign(CENTER, CENTER);
+        // Title
+        textFont('Mali'); textStyle(BOLD);
+        fill(255, 250, 245);
+        textSize(max(36, 60 * gameScaleFactor));
+        text("Edge of the Plane", width / 2, height * 0.3);
+        // Subtitle
+        textFont('Quicksand'); textStyle(NORMAL);
+        textSize(max(20, 32 * gameScaleFactor));
+        fill(colors.spirits[0], colors.spirits[1], colors.spirits[2], 230);
+        text("An Endless Escape", width / 2, height * 0.4);
+        // Instructions
+        textSize(max(14, 20 * gameScaleFactor));
+        fill(255, 250, 240, 220);
+        text("Tap/Hold Left/Right or use Arrow Keys", width / 2, height * 0.55);
+        text("Avoid walls, grab power-ups!", width / 2, height * 0.60);
 
-         // UI Elements (Drawn in screen space 0,0)
-         push();
-         textAlign(CENTER, CENTER);
-         textFont('Mali');
-         textStyle(BOLD);
-
-         // Title
-         fill(255, 250, 245);
-         textSize(60 * gameScaleFactor);
-         text("The Cursed Traveler", width / 2, height * 0.3);
-
-         // Subtitle
-         textFont('Quicksand');
-         textStyle(NORMAL);
-         textSize(32 * gameScaleFactor);
-         fill(themeColors.spirits[0], themeColors.spirits[1], themeColors.spirits[2], 230);
-         text("An Endless Escape", width / 2, height * 0.4);
-
-         // Instructions
-         textSize(22 * gameScaleFactor);
-         fill(255, 250, 240, 220);
-         text("Tap/Hold Left/Right or use Arrow Keys to Rotate", width / 2, height * 0.55);
-         text("Avoid barriers, collect power-ups, survive!", width / 2, height * 0.60);
-
-         // Start Button
-         let buttonY = height * 0.7;
-         let buttonWidth = 220 * gameScaleFactor;
-         let buttonHeight = 65 * gameScaleFactor;
-         let hover = isMouseOver(width / 2, buttonY, buttonWidth, buttonHeight);
-
-         fill(hover ? themeColors.spirits[0] : themeColors.barriers[0],
-              hover ? themeColors.spirits[1] : themeColors.barriers[1],
-              hover ? themeColors.spirits[2] : themeColors.barriers[2], 220);
-         stroke(255, 150);
-         strokeWeight(2 * gameScaleFactor);
-         rect(width / 2, buttonY, buttonWidth, buttonHeight, 10 * gameScaleFactor);
-
-         fill(255);
-         noStroke();
-         textSize(26 * gameScaleFactor);
-         text("Begin Journey", width / 2, buttonY);
-
-         // Story Button (optional)
-         let storyButtonY = buttonY + buttonHeight * 0.8;
-          textSize(18 * gameScaleFactor);
-          fill(isMouseOver(width/2, storyButtonY, buttonWidth*0.8, buttonHeight*0.5) ? 255 : 200);
-          text("Read the Story", width/2, storyButtonY);
-
-         pop();
+        // Buttons
+        drawButton("Begin Journey", width / 2, height * 0.72, 240, 70, colors);
+        drawButton("Story", width / 2, height * 0.85, 180, 50, colors, 0.8);
+        pop();
     }
 
-    function drawStoryScreen(themeColors) {
-         drawBackground(themeColors); // Use standard background
+    function drawStoryScreen(colors) {
+        // Background drawn by main loop
+        push(); // Isolate story drawing
+        textAlign(CENTER, TOP);
+        if (storyFadeIn < 255) storyFadeIn = min(255, storyFadeIn + 5);
 
-         push(); // Isolate story drawing
-         textAlign(CENTER, TOP);
+        // Title
+        textFont('Mali'); textStyle(BOLD);
+        fill(255, 250, 220, storyFadeIn);
+        textSize(max(28, 42 * gameScaleFactor));
+        text("The Traveler's Curse", width / 2, height * 0.15);
 
-         // Fade effect
-         if (storyFadeIn < 255) storyFadeIn += 5;
-         let currentAlpha = storyFadeIn;
+        // Story Text
+        textFont('Quicksand'); textStyle(NORMAL);
+        fill(255, 245, 225, storyFadeIn);
+        textSize(max(15, 20 * gameScaleFactor)); // Adaptive text size
+        textAlign(LEFT, TOP);
+        let storyText = [
+            "Cursed by envy, the Traveler finds every path blocked. Walls rise from the void, turning destinations into traps. Lost, adrift, yet guided by faint whispers...",
+            "Ancient spirits offer aid - fleeting lights in the closing darkness, revealing fragile gaps. They cannot break the curse, only illuminate the path. Survival demands focus, speed, and trust.",
+            "Your turn. Guide the Traveler:\n\n • Flow through the gaps.\n • Harness spirit power (Orbs!).\n • Adapt to shifting realms.\n\nThe escape is endless. How far can you go?"
+        ];
+        let textX = width * 0.15, textY = height * 0.25;
+        let textW = width * 0.7, textH = height * 0.5;
+        text(storyText[storyPage], textX, textY, textW, textH);
 
-          // Title
-         textFont('Mali'); textStyle(BOLD);
-         fill(255, 250, 220, currentAlpha);
-         textSize(42 * gameScaleFactor);
-         text("The Curse of Endless Barriers", width / 2, height * 0.15);
+        // Navigation Buttons
+        let navY = height * 0.85;
+        let backText = storyPage > 0 ? "◄ Prev" : "";
+        let nextText = storyPage < storyText.length - 1 ? "Next ►" : "Start ►";
+        let menuText = "Menu";
 
-         // Story Text Box
-         textFont('Quicksand'); textStyle(NORMAL);
-         fill(255, 245, 225, currentAlpha);
-         textSize(20 * gameScaleFactor); // Adaptive text size
-         textAlign(LEFT, TOP);
-         let storyText = [
-             // Page 1
-              "A gifted traveler, cursed by envy, finds their path forever blocked. Each destination becomes a trap, walls closing in relentlessly. Lost, but not alone...",
-             // Page 2
-             "Forest spirits offer guidance - shimmering lights revealing fleeting gaps. They cannot break the curse, only show the way through. The journey demands speed, focus, and trust...",
-              // Page 3
-             "Now, you guide the traveler.\n\n- Move swiftly through the gaps.\n- Collect spirit aid (Power-ups!).\n- Each realm tests your resolve.\n\nThe curse persists. How long can you endure the escape?"
-         ];
+        drawButton(backText, width * 0.3, navY, 150, 45, colors, 0.9, storyPage > 0);
+        drawButton(nextText, width * 0.7, navY, 150, 45, colors, 0.9);
+        drawButton(menuText, width / 2, height * 0.93, 150, 40, colors, 0.7);
 
-         // Draw current page text within a defined area
-          let textX = width * 0.15;
-          let textY = height * 0.25;
-          let textW = width * 0.7;
-          let textH = height * 0.5;
-          text(storyText[storyPage], textX, textY, textW, textH);
-
-
-          // Navigation
-          textAlign(CENTER, CENTER);
-          textSize(20 * gameScaleFactor);
-          let navY = height * 0.85;
-
-           if (storyPage > 0) {
-               fill(isMouseOver(width * 0.3, navY, 150*gameScaleFactor, 40*gameScaleFactor) ? 255 : 200, currentAlpha);
-               text("◄ Previous", width * 0.3, navY);
-           }
-           if (storyPage < storyText.length - 1) {
-                fill(isMouseOver(width * 0.7, navY, 150*gameScaleFactor, 40*gameScaleFactor) ? 255 : 200, currentAlpha);
-               text("Next ►", width * 0.7, navY);
-           } else {
-                // Show "Start Game" on the last page
-               fill(isMouseOver(width * 0.7, navY, 180*gameScaleFactor, 40*gameScaleFactor) ? color(180, 255, 180, currentAlpha) : color(150, 220, 150, currentAlpha));
-               text("Begin Journey ►", width * 0.7, navY);
-           }
-
-           // Return to menu
-           let menuY = height * 0.92;
-           fill(isMouseOver(width/2, menuY, 200*gameScaleFactor, 30*gameScaleFactor) ? 255 : 200, currentAlpha);
-           text("Return to Menu", width / 2, menuY);
-
-         pop(); // Restore text styles
+        pop();
     }
 
-
-    function drawGameOverScreen(themeColors) {
-        // Semi-transparent overlay
-        noStroke();
-        fill(0, 0, 0, 180);
+    function drawGameOverScreen(colors) {
+        // Background and frozen game world already drawn
+        // Overlay
+        fill(0, 0, 0, 190);
         rect(width / 2, height / 2, width, height);
 
-        push(); // Isolate Game Over drawing
+        push();
         textAlign(CENTER, CENTER);
-
         // Game Over Text
         textFont('Mali'); textStyle(BOLD);
         fill(255, 100, 80);
-        textSize(54 * gameScaleFactor);
-        text("The Barriers Claimed You", width / 2, height * 0.3);
-
+        textSize(max(34, 54 * gameScaleFactor));
+        text("The Void Claims You", width / 2, height * 0.3);
         // Score Display
         textFont('Quicksand'); textStyle(BOLD);
         fill(255, 250, 240);
-        textSize(36 * gameScaleFactor);
+        textSize(max(24, 36 * gameScaleFactor));
         text(`Survived: ${score.toFixed(1)} seconds`, width / 2, height * 0.42);
-
         // High Scores
         textStyle(NORMAL);
         fill(255, 230, 200);
-        textSize(26 * gameScaleFactor);
+        textSize(max(18, 26 * gameScaleFactor));
         text(`Session Best: ${sessionHighScore.toFixed(1)}s`, width / 2, height * 0.52);
         text(`All-time Best: ${lifetimeHighScore.toFixed(1)}s`, width / 2, height * 0.58);
 
-        // Try Again Button
-        let buttonY = height * 0.7;
-        let buttonWidth = 250 * gameScaleFactor;
-        let buttonHeight = 70 * gameScaleFactor;
-        let hover = isMouseOver(width / 2, buttonY, buttonWidth, buttonHeight);
-
-        fill(hover ? 100 : 80, hover ? 140 : 120, hover ? 220 : 200); // Blueish button
-        stroke(255, 180);
-        strokeWeight(3 * gameScaleFactor);
-        rect(width / 2, buttonY, buttonWidth, buttonHeight, 12 * gameScaleFactor);
-
-        fill(255);
-        noStroke();
-        textFont('Mali');
-        textSize(32 * gameScaleFactor);
-        text("Journey Again", width / 2, buttonY);
-
-        // Return to menu link
-         let menuY = height * 0.82;
-         textFont('Quicksand');
-         fill(isMouseOver(width / 2, menuY, 180*gameScaleFactor, 30*gameScaleFactor) ? 255 : 220);
-         textSize(24 * gameScaleFactor);
-         text("Return to Menu", width / 2, menuY);
-
-        pop(); // Restore styles
+        // Buttons
+        drawButton("Journey Again", width / 2, height * 0.72, 260, 70, colors);
+        drawButton("Menu", width / 2, height * 0.85, 180, 50, colors, 0.8);
+        pop();
     }
+
+     function drawButton(label, x, y, wBase, hBase, colors, scale = 1, enabled = true) {
+        if (!label) return; // Don't draw if no label
+
+        let btnW = wBase * gameScaleFactor * scale;
+        let btnH = hBase * gameScaleFactor * scale;
+        let textSize = max(14, 26 * gameScaleFactor * scale * 0.8); // Scaled text size
+
+        let hover = enabled && isMouseOver(x, y, btnW, btnH);
+        let btnColor = color(colors.barriers[0], colors.barriers[1], colors.barriers[2], enabled ? 220 : 100);
+        let hoverColor = color(colors.spirits[0], colors.spirits[1], colors.spirits[2], enabled ? 240 : 120);
+        let textColor = color(255, enabled ? 255 : 150);
+
+        push();
+        fill(hover ? hoverColor : btnColor);
+        stroke(255, enabled ? 150 : 80);
+        strokeWeight(max(1, 2 * gameScaleFactor));
+        rect(x, y, btnW, btnH, 10 * gameScaleFactor * scale);
+
+        fill(textColor);
+        noStroke();
+        textSize(textSize);
+        textFont('Mali');
+        text(label, x, y);
+        pop();
+    }
+
 
     // --- Input Handling ---
 
-    function handleInput() {
-        playerRotationSpeed = 0; // Reset speed each frame
-        let now = millis();
-        let isHolding = false;
-
-        // 3) Improved Movement: Apply acceleration based on hold duration
-        if (keys.left || touch.left) {
-            isHolding = true;
-            if (holdStartTime.left === null) holdStartTime.left = now; // Start timer on first press
-            let holdDuration = now - holdStartTime.left;
-            playerRotationSpeed = -calculateHoldSpeed(holdDuration);
-        } else {
-            holdStartTime.left = null; // Reset timer on release
-        }
-
-        if (keys.right || touch.right) {
-            isHolding = true;
-            if (holdStartTime.right === null) holdStartTime.right = now;
-            let holdDuration = now - holdStartTime.right;
-            // If both are somehow held, prioritize the latest one? Or let right override left?
-             // Simple override: if right is held, it takes precedence.
-             playerRotationSpeed = calculateHoldSpeed(holdDuration);
-        } else {
-            holdStartTime.right = null;
-        }
-
-         // If not holding, apply slight deceleration (optional)
-         // if (!isHolding && abs(playerRotationSpeed) > 0.1) {
-         //     playerRotationSpeed *= 0.9;
-         // }
-    }
-
-    function calculateHoldSpeed(holdDuration) {
-        // Use the configured acceleration parameters
-        let speed = Config.holdBaseSpeed +
-                    pow(holdDuration * Config.holdAccelerationFactor, Config.holdExponent);
-        return min(speed, Config.maxHoldSpeed); // Cap at max speed
-    }
-
     function keyPressed() {
-        if (gameState === 'playing') {
-            if (keyCode === LEFT_ARROW) {
-                keys.left = true;
-                // Tap rotation handled by initial hold speed + first frame acceleration
-                // playerTargetAngle -= Config.tapRotationAmount; // Keep target angle concept if using lerp
-                return false; // Prevent default browser actions
-            } else if (keyCode === RIGHT_ARROW) {
-                keys.right = true;
-                // playerTargetAngle += Config.tapRotationAmount;
-                return false;
-            }
-        } else if (gameState === 'gameOver' || gameState === 'intro') {
-             if (keyCode === ENTER || keyCode === RETURN || key === ' ') { // Space bar too
-                checkButtonClick(width / 2, height * 0.7); // Simulate clicking the main button
-                 return false;
-             }
-         } else if (gameState === 'story') {
-             if (keyCode === ENTER || keyCode === RETURN || key === ' ') {
-                 // Simulate clicking next/start
-                 if (storyPage < 2) checkButtonClick(width * 0.7, height * 0.85);
-                 else checkButtonClick(width * 0.7, height * 0.85); // Click start on last page
-                 return false;
-             } else if (keyCode === LEFT_ARROW) {
-                 if (storyPage > 0) checkButtonClick(width * 0.3, height * 0.85); // Click previous
-                 return false;
-             } else if (keyCode === RIGHT_ARROW) {
-                  if (storyPage < 2) checkButtonClick(width * 0.7, height * 0.85); // Click next
-                 return false;
-             }
-         }
+        // Block default browser behavior for arrow keys
+        if (keyCode === LEFT_ARROW || keyCode === RIGHT_ARROW || keyCode === UP_ARROW || keyCode === DOWN_ARROW || key === ' ') {
+             if (gameState === 'playing' || gameState === 'intro' || gameState === 'gameOver' || gameState === 'story') {
+                  // Handle game input if needed, or just prevent default
+                  if (keyCode === LEFT_ARROW) inputState.left = true;
+                  else if (keyCode === RIGHT_ARROW) inputState.right = true;
+                  else if (key === ' ') handlePrimaryAction(); // Space bar action
 
-         if (keyCode === ESCAPE) { // Escape always returns to menu (if not already there)
-            if (gameState !== 'intro') {
-                gameState = 'intro';
-                storyFadeIn = 0; // Reset fade if coming from story
-                 return false;
-            }
+                  return false;
+             }
+        }
+         if (keyCode === ESCAPE) {
+              handleEscapeAction();
+              return false;
          }
-        return true; // Allow other keys if not handled
+        return true; // Allow other keys
     }
 
     function keyReleased() {
-        if (keyCode === LEFT_ARROW) keys.left = false;
-        if (keyCode === RIGHT_ARROW) keys.right = false;
+        if (keyCode === LEFT_ARROW) inputState.left = false;
+        if (keyCode === RIGHT_ARROW) inputState.right = false;
+        return false; // Prevent default behavior
     }
 
-    function touchStarted(event) {
-        if (!touches || touches.length === 0) return; // Check if touches array exists and has touches
-
-        let currentTouch = touches[0]; // Use the first touch
+    function touchStarted() {
+        if (!touches || touches.length === 0) return;
+        let t = touches[0]; // Use first touch
 
         if (gameState === 'playing') {
-            if (currentTouch.x < width / 2) {
-                touch.left = true;
-                touch.right = false; // Ensure only one side is active
-                // Tap/hold logic handled in handleInput
-            } else {
-                touch.right = true;
-                touch.left = false;
-            }
-             return false; // Prevent default touch actions (scrolling, zooming)
-
+            if (t.x < width / 2) inputState.left = true;
+            else inputState.right = true;
         } else {
-             // Handle button clicks for other states based on touch position
-             handleMouseOrTouchPress(currentTouch.x, currentTouch.y);
+             // Handle button clicks for other states
+             handleMouseOrTouchPress(t.x, t.y);
         }
-         return false; // Prevent default touch actions
+        return false; // Prevent default touch actions (scroll/zoom)
     }
 
     function touchEnded() {
-        // If the touch that ended was the one controlling movement, release
-         // Simple approach: release both on any touch end. More complex logic could track touch IDs.
-        touch.left = false;
-        touch.right = false;
-        holdStartTime.left = null; // Also reset hold timer on release
-        holdStartTime.right = null;
-         return false; // Prevent default touch actions
+        // Stop movement regardless of which touch ended (simplest approach)
+        inputState.left = false;
+        inputState.right = false;
+        inputState.holdStartLeft = null; // Reset hold timer on release
+        inputState.holdStartRight = null;
+        return false; // Prevent default
     }
 
-    // Use mouse clicks to simulate touches for desktop
     function mousePressed() {
-         handleMouseOrTouchPress(mouseX, mouseY);
-         return false; // Prevent default behavior
+        handleMouseOrTouchPress(mouseX, mouseY);
+        return false; // Prevent default
     }
 
     function mouseReleased() {
-         // If mouse was controlling movement via key simulation (optional), release here
-         // Otherwise, primarily handles button up states if needed
-         touchEnded(); // Simulate touch end for consistency
+        // For desktop, releasing mouse stops movement if it was initiated by mouse
+         if(mouseX < width / 2) inputState.left = false;
+         else inputState.right = false;
+         inputState.holdStartLeft = null; // Reset hold timer on release
+         inputState.holdStartRight = null;
     }
 
-
     function handleMouseOrTouchPress(x, y) {
-         // Centralized handler for button clicks in non-playing states
+         // Centralized button click logic
          if (gameState === 'intro') {
-             // Check Start Button
-             if (isMouseOver(width / 2, height * 0.7, 220 * gameScaleFactor, 65 * gameScaleFactor, x, y)) {
-                 startGame();
-             }
-              // Check Story Button
-             else if (isMouseOver(width / 2, height * 0.7 + (65 * gameScaleFactor) * 0.8, 220*gameScaleFactor * 0.8, 65*gameScaleFactor*0.5, x, y)) {
-                 gameState = 'story';
-                 storyPage = 0;
-                 storyFadeIn = 0;
+             if (isMouseOver(width / 2, height * 0.72, 240 * gameScaleFactor, 70 * gameScaleFactor, x, y)) startGame();
+             else if (isMouseOver(width / 2, height * 0.85, 180 * gameScaleFactor * 0.8, 50 * gameScaleFactor * 0.8, x, y)) {
+                 gameState = 'story'; storyPage = 0; storyFadeIn = 0;
              }
          } else if (gameState === 'story') {
-             let navY = height * 0.85;
-             let menuY = height * 0.92;
-             // Check Previous
-             if (storyPage > 0 && isMouseOver(width * 0.3, navY, 150*gameScaleFactor, 40*gameScaleFactor, x, y)) {
-                 storyPage--; storyFadeIn = 0;
-             }
-             // Check Next / Start
-             else if (isMouseOver(width * 0.7, navY, (storyPage<2 ? 150 : 180)*gameScaleFactor, 40*gameScaleFactor, x, y)) {
-                 if (storyPage < 2) { storyPage++; storyFadeIn = 0; }
-                 else { startGame(); }
-             }
-              // Check Return to Menu
-             else if (isMouseOver(width/2, menuY, 200*gameScaleFactor, 30*gameScaleFactor, x, y)) {
-                 gameState = 'intro';
-             }
-
+             let navY = height * 0.85; let menuY = height * 0.93;
+             if (storyPage > 0 && isMouseOver(width * 0.3, navY, 150 * gameScaleFactor * 0.9, 45 * gameScaleFactor * 0.9, x, y)) { storyPage--; storyFadeIn = 0; } // Prev
+             else if (isMouseOver(width * 0.7, navY, 150 * gameScaleFactor * 0.9, 45 * gameScaleFactor * 0.9, x, y)) { // Next/Start
+                 if (storyPage < 2) { storyPage++; storyFadeIn = 0; } else startGame();
+             } else if (isMouseOver(width / 2, menuY, 150 * gameScaleFactor * 0.7, 40 * gameScaleFactor * 0.7, x, y)) { gameState = 'intro'; } // Menu
          } else if (gameState === 'gameOver') {
-             // Check Try Again Button
-             if (isMouseOver(width / 2, height * 0.7, 250 * gameScaleFactor, 70 * gameScaleFactor, x, y)) {
-                 startGame();
-             }
-             // Check Return to Menu
-             else if (isMouseOver(width / 2, height * 0.82, 180*gameScaleFactor, 30*gameScaleFactor, x, y)) {
-                  gameState = 'intro';
-             }
+             if (isMouseOver(width / 2, height * 0.72, 260 * gameScaleFactor, 70 * gameScaleFactor, x, y)) startGame(); // Retry
+             else if (isMouseOver(width / 2, height * 0.85, 180 * gameScaleFactor * 0.8, 50 * gameScaleFactor * 0.8, x, y)) { gameState = 'intro'; } // Menu
          } else if (gameState === 'playing') {
-            // Simulate touch input for mouse clicks during play
-             if (x < width / 2) {
-                 touch.left = true; touch.right = false;
-                 if (holdStartTime.left === null) holdStartTime.left = millis(); // Start hold timer
-             } else {
-                 touch.right = true; touch.left = false;
-                  if (holdStartTime.right === null) holdStartTime.right = millis();
-             }
+             // If clicking during play, treat like touch
+             if (x < width / 2) inputState.left = true;
+             else inputState.right = true;
          }
     }
 
-     // Helper to check if mouse/touch is over a centered rectangle
-     function isMouseOver(rectX, rectY, rectW, rectH, checkX = mouseX, checkY = mouseY) {
+    function handlePrimaryAction() { // e.g., Space Bar or Enter
+        if (gameState === 'intro' || gameState === 'gameOver') {
+             startGame(); // Main action is to start/retry
+         } else if (gameState === 'story') {
+              if (storyPage < 2) { storyPage++; storyFadeIn = 0; } // Next page
+              else startGame(); // Start game from last page
+         }
+    }
+
+    function handleEscapeAction() {
+         if (gameState !== 'intro') {
+              gameState = 'intro';
+              storyFadeIn = 0; // Reset story fade if escaping from it
+              // Potentially reset other things if escaping from 'playing'
+         }
+    }
+
+
+    // --- Utilities ---
+
+    function isMouseOver(rectX, rectY, rectW, rectH, checkX = mouseX, checkY = mouseY) {
         let left = rectX - rectW / 2;
         let right = rectX + rectW / 2;
         let top = rectY - rectH / 2;
         let bottom = rectY + rectH / 2;
         return checkX > left && checkX < right && checkY > top && checkY < bottom;
-     }
-
-     // Helper to simulate button clicks via keyboard
-     function checkButtonClick(buttonX, buttonY) {
-        // Find the button parameters based on state and location (approximate)
-         // This is a bit hacky, assumes button locations are known
-         if (gameState === 'intro' && abs(buttonY - height*0.7) < 10) {
-             handleMouseOrTouchPress(buttonX, buttonY); // Click Start
-         } else if (gameState === 'story') {
-             if (abs(buttonY - height*0.85) < 10) {
-                  handleMouseOrTouchPress(buttonX, buttonY); // Click Prev/Next/Start
-             }
-         } else if (gameState === 'gameOver' && abs(buttonY - height*0.7) < 10) {
-             handleMouseOrTouchPress(buttonX, buttonY); // Click Retry
-         }
-     }
-
-
-    // --- Utility Functions ---
+    }
 
     function loadHighScores() {
-        try {
-            lifetimeHighScore = parseFloat(localStorage.getItem('cursedTravelerHighScoreV2')) || 0; // Use new key if format changes
-        } catch (e) { lifetimeHighScore = 0; }
-        sessionHighScore = 0;
+        try { lifetimeHighScore = parseFloat(localStorage.getItem('edgeOfPlaneHighScore')) || 0; }
+        catch (e) { lifetimeHighScore = 0; }
+        sessionHighScore = 0; // Reset session score on load
     }
 
     function saveHighScores() {
-        try {
-            localStorage.setItem('cursedTravelerHighScoreV2', lifetimeHighScore.toString());
-        } catch (e) { console.error("Could not save high score:", e); }
+        try { localStorage.setItem('edgeOfPlaneHighScore', lifetimeHighScore.toString()); }
+        catch (e) { console.error("Failed to save high score:", e); }
     }
 
     function windowResized() {
-        // 1) Adaptive Canvas: Resize canvas to new window dimensions
         resizeCanvas(windowWidth, windowHeight);
-        // Recalculate dynamic dimensions and re-initialize scaled elements
         updateDimensions();
-        initializeGameElements(); // Recreate elements based on new size
+        initializeElements(); // Re-initialize scaled elements
+        // Redraw immediately to avoid artifacts
+        if (typeof draw === 'function') { // Ensure draw exists
+            redraw(); // Ask p5 to redraw canvas once
+        }
     }
 
     function updateDimensions() {
-        canvasWidth = width; // p5.js width/height vars
-        canvasHeight = height;
-        centerX = canvasWidth / 2;
-        centerY = canvasHeight / 2;
-        minDimension = min(canvasWidth, canvasHeight);
-
-        // Scale UI elements based on the smaller dimension or a base size
-        gameScaleFactor = minDimension / 1080; // Scale relative to a 1080p height baseline
-
-        // Calculate player orbit based on screen size
-        playerOrbitRadius = minDimension * Config.playerDistanceFromCenterFactor;
-    }
-
-    function isMobile() {
-        // Basic check, can be more robust
-        return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+        canvasWidth = width; canvasHeight = height;
+        centerX = width / 2; centerY = height / 2;
+        minDimension = min(width, height);
+        gameScaleFactor = minDimension / Config.uiScaleBase;
+        playerOrbitRadius = minDimension * Config.playerOrbitFactor;
     }
 
     function getCurrentThemeColors() {
-        if (themeBlendFactor >= 1 || currentTheme === targetTheme) {
-            return Config.colorThemes[targetTheme];
+        if (themeBlendFactor >= 1 || currentThemeIndex === targetThemeIndex) {
+            return Config.colorThemes[targetThemeIndex];
         }
-
-        // Blend between current and target theme
-        let currentC = Config.colorThemes[currentTheme];
-        let targetC = Config.colorThemes[targetTheme];
-        let blended = { name: targetC.name }; // Use target name during transition
-
+        // Perform blending (simplified - assumes structure matches)
+        let currentC = Config.colorThemes[currentThemeIndex];
+        let targetC = Config.colorThemes[targetThemeIndex];
+        let blended = { name: targetC.name };
         try {
-             for (let key in currentC) {
-                 if (key === 'name') continue; // Skip name property
-
-                 if (Array.isArray(currentC[key]) && Array.isArray(targetC[key])) {
-                     // Ensure target theme has the same key and it's an array
-                     if (currentC[key].length === targetC[key].length) {
-                         blended[key] = currentC[key].map((val, i) => {
-                             // Check if the target value is a number before lerping
-                             if (typeof val === 'number' && typeof targetC[key][i] === 'number') {
-                                 return lerp(val, targetC[key][i], themeBlendFactor);
-                             }
-                             return val; // Fallback if not numbers
-                         });
-                     } else {
-                         blended[key] = targetC[key]; // Fallback if lengths differ
-                     }
-                 } else if (typeof currentC[key] === 'number' && typeof targetC[key] === 'number') {
-                     // Lerp numeric properties directly
-                     blended[key] = lerp(currentC[key], targetC[key], themeBlendFactor);
-                 } else {
-                     // Otherwise, just take the target value immediately
+            for (let key in targetC) {
+                if (key === 'name') continue;
+                if (Array.isArray(targetC[key]) && currentC && Array.isArray(currentC[key]) && currentC[key].length === targetC[key].length) {
+                    blended[key] = currentC[key].map((val, i) => {
+                        if (typeof val === 'number' && typeof targetC[key][i] === 'number') {
+                            return lerp(val, targetC[key][i], themeBlendFactor);
+                        } return targetC[key][i]; // Fallback for non-numeric array elements
+                    });
+                } else { // Non-arrays or mismatched arrays, just switch
                      blended[key] = targetC[key];
-                 }
-             }
-        } catch (error) {
-             console.error("Error during theme blending:", error);
-             return Config.colorThemes[targetTheme]; // Fallback to target theme on error
+                }
+            }
+        } catch (e) {
+            console.error("Theme blending error", e); return targetC;
         }
-
         return blended;
     }
 
     function changeTheme() {
-        currentTheme = targetTheme; // Old target becomes current
-        let newTheme;
-        do {
-            newTheme = floor(random(Config.colorThemes.length));
-        } while (newTheme === currentTheme && Config.colorThemes.length > 1); // Ensure it's different if possible
-
-        targetTheme = newTheme;
+        currentThemeIndex = targetThemeIndex;
+        let newIndex;
+        if (Config.colorThemes.length <= 1) {
+            newIndex = currentThemeIndex; // Cannot change if only one theme
+        } else {
+            do { newIndex = floor(random(Config.colorThemes.length)); }
+            while (newIndex === currentThemeIndex);
+        }
+        targetThemeIndex = newIndex;
         themeBlendFactor = 0; // Start blending
     }
 
-     function checkForThemeChange() {
-        // Change theme based on score milestones (e.g., every 30 seconds)
-        let themeIndex = floor(min(score / 45, Config.colorThemes.length - 1)); // Change less frequently
-
-        // Trigger a theme change based on index progression OR reaching a destination (if implemented)
-         if (themeIndex > currentTheme && themeIndex !== targetTheme) {
-             changeTheme(); // Use the random change logic for variety
-         }
-         // Alternative: Force sequential change
-         // if (themeIndex !== targetTheme) {
-         //     currentTheme = targetTheme;
-         //     targetTheme = themeIndex;
-         //     themeBlendFactor = 0;
-         // }
-    }
-
-    // Particle System Functions (Keep similar logic, adjust creation points)
-    function addParticle(x, y, vx, vy, size, color, lifespan) {
-        if (particles.length >= Config.maxParticles) {
-            particles.shift(); // Remove oldest
-        }
-        particles.push({ x, y, vx, vy, size, color, lifespan, maxLifespan: lifespan, alpha: 255 });
-    }
-
-    function updateAndDrawParticles(themeColors) {
-        noStroke();
-        for (let i = particles.length - 1; i >= 0; i--) {
-            let p = particles[i];
-            p.x += p.vx * (deltaTime / 16.667);
-            p.y += p.vy * (deltaTime / 16.667);
-            p.lifespan -= (deltaTime / 16.667);
-            p.alpha = 255 * (p.lifespan / p.maxLifespan);
-            p.size *= 0.98; // Shrink particles
-
-            if (p.lifespan <= 0 || p.size < 0.5) {
-                particles.splice(i, 1);
-            } else {
-                fill(p.color[0], p.color[1], p.color[2], p.alpha);
-                ellipse(p.x, p.y, p.size, p.size);
-            }
+    function checkForThemeChange() {
+        // Change theme based purely on score interval for simplicity
+        if (floor(score / Config.themeChangeScoreInterval) > floor((score - (deltaTime/1000)) / Config.themeChangeScoreInterval)) {
+             if (currentThemeIndex === targetThemeIndex) { // Only trigger if not already blending
+                  changeTheme();
+             }
         }
     }
 
-
-     function createBackgroundLayers() {
-        backgroundLayers = [];
-        for (let i = 0; i < Config.backgroundLayers; i++) {
-            backgroundLayers.push({
-                depth: 0.2 + (i * 0.25), // Adjust depth spacing
-                offset: random(360),
-                speed: (0.05 + (i * 0.03)) * 0.5 // Slower rotation
-            });
-        }
-    }
-
-    function createForestElements() {
-        forestElements = [];
-         let maxDist = max(width, height) * 1.2; // Place elements further out
-        for (let i = 0; i < Config.forestElements; i++) {
-             let angle = random(360);
-             let dist = random(playerOrbitRadius * 1.5, maxDist); // Place beyond player orbit
-             let depth = random(0.4, 1.0); // Vary depth
-             forestElements.push({
-                 worldX: centerX + dist * cos(angle), // Store world coords relative to center
-                 worldY: centerY + dist * sin(angle),
-                 baseSize: random(30, 90), // Base size before scaling
-                 type: floor(random(3)),
-                 depth: depth,
-                 swayAmount: random(0.5, 2) * depth, // Link sway to depth
-                 swaySpeed: random(0.3, 0.8),
-                 swayOffset: random(360),
-                 currentSway: 0 // Add property to store current sway angle
-             });
-         }
-         // Sort by depth for correct drawing order (optional)
-         // forestElements.sort((a, b) => a.depth - b.depth);
-    }
-
-    function createCloudElements() {
-        cloudElements = [];
-        for (let i = 0; i < Config.cloudElements; i++) {
-            let depth = random(0.1, 0.4);
-             cloudElements.push({
-                 x: centerX + random(-width * 0.8, width * 0.8), // Position relative to center
-                 y: centerY + random(-height * 0.4, height * 0.4) * depth, // Y pos affected by depth
-                 baseWidth: random(150, 350),
-                 baseHeight: random(40, 120),
-                 speed: random(0.1, 0.3) * (1 + depth), // Faster clouds based on depth slightly
-                 depth: depth
-             });
-         }
-    }
-
-    function createSpiritGuides() {
+    // --- Element Creation --- (Called during setup/reset)
+     function createSpiritGuides() {
         spiritGuides = [];
          let minDist = minDimension * Config.spiritGuideDistanceFactorMin;
          let maxDist = minDimension * Config.spiritGuideDistanceFactorMax;
-        for (let i = 0; i < Config.spiritGuidesCount; i++) {
-            spiritGuides.push({
-                angle: random(360),
-                baseDistance: random(minDist, maxDist), // Base distance before scaling
-                baseSize: random(Config.spiritGuideSizeBase * 0.8, Config.spiritGuideSizeBase * 1.2),
-                speed: random(0.5, 1.5) * Config.spiritGuideOrbitSpeed,
-                pulseSpeed: random(1, 3),
-                phaseOffset: random(360)
-            });
-        }
-    }
-
+         for (let i = 0; i < Config.spiritGuidesCount; i++) {
+             spiritGuides.push({
+                 currentAngle: random(360), // Track current angle
+                 baseDistance: random(minDist, maxDist),
+                 baseSize: random(Config.spiritGuideSizeBase * 0.8, Config.spiritGuideSizeBase * 1.2),
+                 speed: random(0.5, 1.5) * Config.spiritGuideOrbitSpeed,
+                 pulseSpeed: random(1, 3),
+                 phaseOffset: random(360)
+             });
+         }
+     }
+     // Add createForestElements, createCloudElements etc. if used, ensuring they use dynamic dimensions
 
     // Prevent context menu on long press (important for mobile)
-    window.oncontextmenu = function(event) {
-        event.preventDefault();
-        event.stopPropagation();
-        return false;
-    };
+    window.oncontextmenu = (event) => { event.preventDefault(); event.stopPropagation(); return false; };
 
     </script>
 </body>
