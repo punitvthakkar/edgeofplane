@@ -177,8 +177,14 @@
     let spiritGuides = [];
     let particles = [];
     let barriers = [];
-    let powerups = []; // Array to hold active power-ups
-    let floatingTexts = []; // For "+7s" etc.
+    let powerups = [];
+let floatingTexts = [];
+let storyTextOpacity = 0; // Need this too for drawStoryHints
+let storyDisplayTime = 0; // Need this too for drawStoryHints
+let currentStoryPhrase = ""; // <<<< ADD THIS LINE (or ensure it exists and is spelled correctly)
+
+// Display metrics (Dynamic)
+let canvasWidth, canvasHeight;
 
     // Display metrics (Dynamic)
     let canvasWidth, canvasHeight;
