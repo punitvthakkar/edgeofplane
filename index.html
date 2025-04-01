@@ -6,6 +6,8 @@
     <title>The Cursed Traveler's Journey</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.9.0/p5.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.9.0/addons/p5.sound.min.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Quicksand:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Mali:wght@300;400;500;600&display=swap" rel="stylesheet">
     <style>
         * {
             margin: 0;
@@ -22,8 +24,7 @@
             justify-content: center;
             align-items: center;
             touch-action: none;
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-        }
+            font-family: 'Quicksand', 'Mali', sans-serif;
         
         #orientation-message {
             display: none;
@@ -209,6 +210,8 @@
     let playerTargetAngle = 0;
     let playerRotationSpeed = 0;
     let playerTrail = [];
+    let playerGlowIntensity = 0;
+    let playerGlowDirection = 1;
     
     // Environment Elements
     let forestElements = [];
@@ -218,6 +221,11 @@
     let barriers = [];
     let destinations = [];
     let backgroundLayers = [];
+    
+    // Performance Management
+    let lastFrameTime = 0;
+    let frameTimeHistory = [];
+    let isLowPerformanceMode = false;
     
     // Display metrics
     let canvasWidth, canvasHeight;
@@ -385,61 +393,101 @@
     
     // Main draw loop
     function draw() {
-        // Handle camera movement based on player angle
-        let cameraAngle = -playerAngle;
-        
-        // Update game state
-        if (gameState === 'intro') {
-            drawIntroScreen();
-        } else if (gameState === 'story') {
-            drawStoryScreen();
-        } else if (gameState === 'playing') {
-            updatePlaying();
+        try {
+            // Performance monitoring
+            let currentFrameTime = millis();
+            if (lastFrameTime > 0) {
+                let frameTime = currentFrameTime - lastFrameTime;
+                frameTimeHistory.push(frameTime);
+                
+                // Keep only the last 60 frames for analysis
+                if (frameTimeHistory.length > 60) {
+                    frameTimeHistory.shift();
+                }
+                
+                // Check if performance is low
+                if (frameTimeHistory.length > 10) {
+                    let avgFrameTime = frameTimeHistory.reduce((a, b) => a + b, 0) / frameTimeHistory.length;
+                    isLowPerformanceMode = avgFrameTime > 33; // More than 33ms per frame (less than 30fps)
+                }
+            }
+            lastFrameTime = currentFrameTime;
             
-            // Draw world
-            push();
-            translate(gameOffsetX, gameOffsetY);
-            rotate(cameraAngle);
+            // Handle camera movement based on player angle
+            let cameraAngle = -playerAngle;
             
-            drawBackground();
-            drawForestElements();
-            updateAndDrawParticles();
-            drawBarriers();
-            drawSpiritGuides();
-            drawDestinations();
+            // Update game state
+            if (gameState === 'intro') {
+                drawIntroScreen();
+            } else if (gameState === 'story') {
+                drawStoryScreen();
+            } else if (gameState === 'playing') {
+                updatePlaying();
+                
+                // Draw world
+                push();
+                translate(gameOffsetX, gameOffsetY);
+                rotate(cameraAngle);
+                
+                drawBackground();
+                drawForestElements();
+                updateAndDrawParticles();
+                drawBarriers();
+                drawSpiritGuides();
+                drawDestinations();
+                
+                // Draw player
+                drawPlayer();
+                
+                pop();
+                
+                // HUD elements (not affected by camera rotation)
+                drawHUD();
+                drawStoryHints();
+                
+                // Check for collisions
+                checkCollisions();
+                
+            } else if (gameState === 'gameOver') {
+                // Draw the world one last time (frozen)
+                push();
+                translate(gameOffsetX, gameOffsetY);
+                rotate(cameraAngle);
+                
+                drawBackground();
+                drawForestElements();
+                updateAndDrawParticles();
+                drawBarriers();
+                drawSpiritGuides();
+                drawDestinations();
+                
+                // Draw player
+                drawPlayer();
+                
+                pop();
+                
+                // Draw game over screen
+                drawGameOverScreen();
+            }
             
-            // Draw player
-            drawPlayer();
+            // Performance debug display (uncomment to use)
+            /*
+            if (isLowPerformanceMode) {
+                push();
+                fill(255, 0, 0, 180);
+                noStroke();
+                textSize(14);
+                text("Low performance mode", 80, height - 10);
+                pop();
+            }
+            */
             
-            pop();
-            
-            // HUD elements (not affected by camera rotation)
-            drawHUD();
-            drawStoryHints();
-            
-            // Check for collisions
-            checkCollisions();
-            
-        } else if (gameState === 'gameOver') {
-            // Draw the world one last time (frozen)
-            push();
-            translate(gameOffsetX, gameOffsetY);
-            rotate(cameraAngle);
-            
-            drawBackground();
-            drawForestElements();
-            updateAndDrawParticles();
-            drawBarriers();
-            drawSpiritGuides();
-            drawDestinations();
-            
-            // Draw player
-            drawPlayer();
-            
-            pop();
-            
-            // Draw game over screen
-            drawGameOverScreen();
+        } catch (error) {
+            console.log("Error in draw loop:", error);
+            // Try to recover from errors by resetting state
+            if (gameState === 'playing') {
+                gameState = 'gameOver';
+            }
         }
     }
     
@@ -632,64 +680,93 @@
     }
     
     function updateDestinations() {
-        for (let i = destinations.length - 1; i >= 0; i--) {
-            // Move destination inward
-            destinations[i].distance -= (currentDifficulty.wallSpeed * 0.8) * (deltaTime / 16);
-            
-            // Fade in destination
-            if (destinations[i].distance < max(canvasWidth, canvasHeight) && destinations[i].alpha < 255) {
-                destinations[i].alpha += 2;
-            }
-            
-            // Check if player reached the destination
-            if (destinations[i].distance < Config.playerDistanceFromCenter + 20 && 
-                destinations[i].distance > Config.playerDistanceFromCenter - 20) {
-                
-                // Player reached destination - spawn barriers and remove destination
-                let numBarriers = 12;
-                let barrierAngleSpacing = 360 / numBarriers;
-                
-                for (let j = 0; j < numBarriers; j++) {
-                    let startAngle = j * barrierAngleSpacing;
-                    let endAngle = (j + 1) * barrierAngleSpacing;
-                    
-                    // Skip the segment where the player is
-                    if (playerAngle >= startAngle && playerAngle <= endAngle) continue;
-                    
-                    barriers.push({
-                        startAngle: startAngle,
-                        endAngle: endAngle,
-                        distance: Config.playerDistanceFromCenter + 100,
-                        thickness: 40 * gameScaleFactor,
-                        alpha: 0,
-                        safePassage: false
-                    });
+        try {
+            for (let i = destinations.length - 1; i >= 0; i--) {
+                // Validate destination object
+                if (!destinations[i]) {
+                    console.log("Invalid destination detected and removed");
+                    destinations.splice(i, 1);
+                    continue;
                 }
                 
-                // Add special particles
-                for (let j = 0; j < 30; j++) {
-                    addParticle(
-                        Config.playerDistanceFromCenter * cos(playerAngle),
-                        Config.playerDistanceFromCenter * sin(playerAngle),
-                        random(-2, 2),
-                        random(-2, 2),
-                        random(5, 15),
-                        [255, 255, 200],
-                        random(60, 120)
-                    );
+                // Move destination inward
+                destinations[i].distance -= (currentDifficulty.wallSpeed * 0.8) * (deltaTime / 16);
+                
+                // Fade in destination
+                if (destinations[i].distance < max(canvasWidth, canvasHeight) && destinations[i].alpha < 255) {
+                    destinations[i].alpha += 2;
                 }
                 
-                // Remove the destination
-                destinations.splice(i, 1);
+                // Check if player reached the destination
+                if (destinations[i].distance < Config.playerDistanceFromCenter + 20 && 
+                    destinations[i].distance > Config.playerDistanceFromCenter - 20) {
+                    
+                    // Player reached destination - spawn barriers and remove destination
+                    try {
+                        // Limit number of barriers based on performance
+                        let numBarriers = isLowPerformanceMode ? 8 : 12;
+                        let barrierAngleSpacing = 360 / numBarriers;
+                        
+                        // Create a safe zone where player is
+                        let playerSafeZoneStart = playerAngle - barrierAngleSpacing/2;
+                        let playerSafeZoneEnd = playerAngle + barrierAngleSpacing/2;
+                        
+                        for (let j = 0; j < numBarriers; j++) {
+                            let startAngle = j * barrierAngleSpacing;
+                            let endAngle = (j + 1) * barrierAngleSpacing;
+                            
+                            // Skip creating a barrier if it would overlap with player
+                            if ((playerAngle >= startAngle && playerAngle <= endAngle) ||
+                                (startAngle >= playerSafeZoneStart && startAngle <= playerSafeZoneEnd) ||
+                                (endAngle >= playerSafeZoneStart && endAngle <= playerSafeZoneEnd)) {
+                                continue;
+                            }
+                            
+                            barriers.push({
+                                startAngle: startAngle,
+                                endAngle: endAngle,
+                                distance: Config.playerDistanceFromCenter + 100,
+                                thickness: 40 * gameScaleFactor,
+                                alpha: 0,
+                                safePassage: false
+                            });
+                        }
+                        
+                        // Add special particles
+                        let particleCount = isLowPerformanceMode ? 15 : 30;
+                        for (let j = 0; j < particleCount; j++) {
+                            addParticle(
+                                Config.playerDistanceFromCenter * cos(playerAngle),
+                                Config.playerDistanceFromCenter * sin(playerAngle),
+                                random(-2, 2),
+                                random(-2, 2),
+                                random(8, 20),
+                                [255, 255, 200],
+                                random(60, 120)
+                            );
+                        }
+                        
+                        // Change theme with a small delay to prevent freezing
+                        setTimeout(() => {
+                            changeTheme();
+                        }, 50);
+                        
+                    } catch (error) {
+                        console.log("Error in destination collision handling:", error);
+                    }
+                    
+                    // Remove the destination
+                    destinations.splice(i, 1);
+                    continue;
+                }
                 
-                // Change theme
-                changeTheme();
+                // Remove destinations that have passed the center
+                if (destinations[i].distance < 10) {
+                    destinations.splice(i, 1);
+                }
             }
-            
-            // Remove destinations that have passed the center
-            if (destinations[i].distance < 10) {
-                destinations.splice(i, 1);
-            }
+        } catch (error) {
+            console.log("Error in updateDestinations:", error);
         }
     }
     
@@ -1141,6 +1218,16 @@
     function drawPlayer() {
         let themeColors = getCurrentThemeColors();
         
+        // Update player glow effect
+        playerGlowIntensity += 0.05 * playerGlowDirection;
+        if (playerGlowIntensity > 1) {
+            playerGlowIntensity = 1;
+            playerGlowDirection = -1;
+        } else if (playerGlowIntensity < 0.4) {
+            playerGlowIntensity = 0.4;
+            playerGlowDirection = 1;
+        }
+        
         // Calculate player position
         let x = Config.playerDistanceFromCenter * cos(playerAngle);
         let y = Config.playerDistanceFromCenter * sin(playerAngle);
@@ -1152,7 +1239,7 @@
             let trailY = point.distance * sin(point.angle);
             
             noStroke();
-            fill(themeColors.player[0], themeColors.player[1], themeColors.player[2], point.alpha * 0.5);
+            fill(themeColors.player[0], themeColors.player[1], themeColors.player[2], point.alpha * 0.7);
             ellipse(trailX, trailY, point.size, point.size);
         }
         
@@ -1161,35 +1248,68 @@
         translate(x, y);
         rotate(playerAngle + 90); // Rotate to face direction of travel
         
-        // Glow effect
-        noStroke();
-        fill(themeColors.player[0], themeColors.player[1], themeColors.player[2], 100);
-        ellipse(0, 0, Config.playerSize * 1.5, Config.playerSize * 1.5);
+        // Enhanced outer glow effect
+        let glowSize = Config.playerSize * (2.0 + playerGlowIntensity * 0.8);
+        let innerGlowSize = Config.playerSize * (1.5 + playerGlowIntensity * 0.5);
         
-        // Player body
-        fill(themeColors.player[0], themeColors.player[1], themeColors.player[2]);
+        // Outer glow layers
+        for (let i = 0; i < 3; i++) {
+            let glowAlpha = map(i, 0, 3, 40, 100) * playerGlowIntensity;
+            let size = glowSize - (i * 10);
+            
+            noStroke();
+            fill(themeColors.player[0], themeColors.player[1], themeColors.player[2], glowAlpha);
+            ellipse(0, 0, size, size);
+        }
+        
+        // Inner glow
+        fill(255, 255, 255, 120 * playerGlowIntensity);
+        ellipse(0, 0, innerGlowSize, innerGlowSize);
+        
+        // Core player body with improved visibility
+        stroke(20, 20, 20, 100);
+        strokeWeight(1);
+        fill(
+            min(255, themeColors.player[0] * 1.2), 
+            min(255, themeColors.player[1] * 1.2), 
+            min(255, themeColors.player[2] * 1.2)
+        );
+        
         beginShape();
-        vertex(0, -Config.playerSize * 0.5); // Top point
-        vertex(Config.playerSize * 0.4, Config.playerSize * 0.3); // Bottom right
+        vertex(0, -Config.playerSize * 0.6); // Top point (slightly taller)
+        vertex(Config.playerSize * 0.45, Config.playerSize * 0.3); // Bottom right
         vertex(0, Config.playerSize * 0.1); // Bottom middle
-        vertex(-Config.playerSize * 0.4, Config.playerSize * 0.3); // Bottom left
+        vertex(-Config.playerSize * 0.45, Config.playerSize * 0.3); // Bottom left
         endShape(CLOSE);
         
-        // Inner details
-        fill(themeColors.bg[0], themeColors.bg[1], themeColors.bg[2], 200);
-        ellipse(0, -Config.playerSize * 0.15, Config.playerSize * 0.3, Config.playerSize * 0.3);
+        // Inner details - more visible
+        fill(255, 255, 255, 220);
+        stroke(40, 40, 40, 70);
+        strokeWeight(1);
+        ellipse(0, -Config.playerSize * 0.15, Config.playerSize * 0.35, Config.playerSize * 0.35);
+        
+        // Add extra detail lines for character
+        stroke(240, 255, 240, 180);
+        strokeWeight(1);
+        noFill();
+        arc(0, 0, Config.playerSize * 0.7, Config.playerSize * 0.7, 160, 220);
         
         pop();
         
-        // Occasionally emit particles from player
-        if (random() < 0.2) {
+        // Enhanced particle effects from player
+        if (random() < 0.3) { // Increased particle emission
+            let angle = random(360);
+            let dist = random(Config.playerSize * 0.3, Config.playerSize * 0.8);
+            let particleX = x + cos(angle) * dist;
+            let particleY = y + sin(angle) * dist;
+            
             addParticle(
-                x, y,
-                random(-1, 1),
-                random(-1, 1),
-                random(4, 8) * gameScaleFactor,
-                themeColors.player,
-                random(20, 40)
+                particleX, particleY,
+                random(-1.5, 1.5),
+                random(-1.5, 1.5),
+                random(5, 12) * gameScaleFactor,
+                [255, 255, 255], // Brighter particles for better visibility
+                random(20, 50)
             );
         }
     }
@@ -1197,17 +1317,40 @@
     function drawHUD() {
         let themeColors = getCurrentThemeColors();
         
-        // Score display
+        // Score display with improved visibility
         push();
-        noStroke();
-        fill(255, 200);
-        textSize(24 * gameScaleFactor);
+        // Text shadow for better readability
+        textFont('Mali');
+        textStyle(BOLD);
+        textSize(32 * gameScaleFactor);
         textAlign(RIGHT, TOP);
+        
+        // Shadow
+        fill(20, 20, 20, 120);
+        text(`Time: ${score.toFixed(1)}s`, canvasWidth - 18, 22);
+        
+        // Actual text
+        fill(255, 240, 220, 230);
         text(`Time: ${score.toFixed(1)}s`, canvasWidth - 20, 20);
         
-        // Theme name
+        // Theme name with improved styling
         textAlign(LEFT, TOP);
-        fill(themeColors.spirits[0], themeColors.spirits[1], themeColors.spirits[2], 200);
+        textFont('Quicksand');
+        textStyle(NORMAL);
+        textSize(28 * gameScaleFactor);
+        
+        // Text shadow
+        fill(20, 20, 20, 100);
+        text(themeColors.name, 22, 22);
+        
+        // Actual text with glow effect
+        fill(themeColors.spirits[0], themeColors.spirits[1], themeColors.spirits[2], 230);
+        text(themeColors.name, 20, 20);
+        
+        // Add subtle glow around text
+        noFill();
+        strokeWeight(3);
+        stroke(themeColors.spirits[0], themeColors.spirits[1], themeColors.spirits[2], 60);
         text(themeColors.name, 20, 20);
         pop();
     }
@@ -1223,19 +1366,31 @@
         storyDisplayTime++;
         
         if (storyDisplayTime < 60) {
-            storyTextOpacity = min(storyTextOpacity + 2, 150);
+            storyTextOpacity = min(storyTextOpacity + 2, 180); // Increased opacity
         } else if (storyDisplayTime > 240) {
             storyTextOpacity = max(storyTextOpacity - 2, 0);
         }
         
-        // Draw story hint
+        // Draw story hint with improved styling
         if (storyTextOpacity > 0) {
             push();
-            noStroke();
-            fill(255, 255, 255, storyTextOpacity);
-            textSize(18 * gameScaleFactor);
+            textFont('Mali');
             textAlign(CENTER, CENTER);
-            text(currentStoryPhrase, canvasWidth / 2, canvasHeight - 40);
+            textSize(24 * gameScaleFactor); // Larger text
+            
+            // Draw text shadow for better readability
+            fill(20, 20, 20, storyTextOpacity * 0.6);
+            text(currentStoryPhrase, canvasWidth / 2 + 2, canvasHeight - 58);
+            
+            // Draw main text
+            fill(255, 255, 250, storyTextOpacity);
+            text(currentStoryPhrase, canvasWidth / 2, canvasHeight - 60);
+            
+            // Add subtle glow around text
+            noFill();
+            strokeWeight(3);
+            stroke(255, 255, 240, storyTextOpacity * 0.3);
+            text(currentStoryPhrase, canvasWidth / 2, canvasHeight - 60);
             pop();
         }
     }
@@ -1243,56 +1398,92 @@
     function drawIntroScreen() {
         let themeColors = Config.colorThemes[0];
         
-        // Draw animated background
-        background(themeColors.bg[0], themeColors.bg[1], themeColors.bg[2]);
+        // Draw animated background with gradient
+        let gradientY = height/2;
+        setGradient(0, 0, width, height, 
+                   color(themeColors.bg[0]*0.8, themeColors.bg[1]*0.8, themeColors.bg[2]*0.8), 
+                   color(themeColors.bg[0]*1.2, themeColors.bg[1]*1.2, themeColors.bg[2]*1.2));
         
         // Draw animated elements in background
         push();
         translate(gameOffsetX, gameOffsetY);
         
-        // Animated circles
+        // Enhanced animated circles
         noFill();
         for (let i = 0; i < 5; i++) {
             let size = 100 + i * 80 + sin(frameCount * 0.02 + i) * 20;
-            stroke(themeColors.spirits[0], themeColors.spirits[1], themeColors.spirits[2], 100 - i * 15);
-            strokeWeight(2);
+            stroke(themeColors.spirits[0], themeColors.spirits[1], themeColors.spirits[2], 120 - i * 15);
+            strokeWeight(2 + (5-i)*0.5);
             ellipse(0, 0, size, size);
         }
         
-        // Draw some particles
-        if (random() < 0.2) {
+        // Additional decorative arcs
+        for (let i = 0; i < 6; i++) {
+            let rotation = frameCount * 0.1 + i * 60;
+            push();
+            rotate(rotation);
+            stroke(255, 255, 255, 50);
+            strokeWeight(1);
+            noFill();
+            arc(0, 0, 300, 300, 0, 120);
+            pop();
+        }
+        
+        // Draw more particles for liveliness
+        if (random() < 0.3) {
             let angle = random(360);
-            let distance = random(50, 200);
+            let distance = random(50, 250);
             addParticle(
                 distance * cos(angle),
                 distance * sin(angle),
-                random(-0.5, 0.5),
-                random(-0.5, 0.5),
-                random(5, 15),
+                random(-0.7, 0.7),
+                random(-0.7, 0.7),
+                random(7, 18),
                 themeColors.particles,
-                random(60, 120)
+                random(80, 150)
             );
         }
         
         updateAndDrawParticles();
         pop();
         
-        // Game title
+        // Game title with enhanced styling
         push();
         textAlign(CENTER, CENTER);
-        textSize(48 * gameScaleFactor);
-        fill(255);
+        textFont('Mali');
+        textStyle(BOLD);
+        
+        // Title glow
+        for (let i = 5; i > 0; i--) {
+            let alpha = map(i, 5, 0, 30, 100);
+            fill(themeColors.spirits[0], themeColors.spirits[1], themeColors.spirits[2], alpha);
+            textSize((60 + i*2) * gameScaleFactor);
+            text("The Cursed Traveler", canvasWidth / 2, canvasHeight * 0.3);
+        }
+        
+        // Main title
+        fill(255, 250, 245);
+        textSize(60 * gameScaleFactor);
         text("The Cursed Traveler", canvasWidth / 2, canvasHeight * 0.3);
         
-        // Subtitle
-        textSize(24 * gameScaleFactor);
-        fill(themeColors.spirits[0], themeColors.spirits[1], themeColors.spirits[2]);
+        // Subtitle with enhanced styling
+        textFont('Quicksand');
+        textStyle(NORMAL);
+        textSize(32 * gameScaleFactor);
+        
+        // Subtitle shadow
+        fill(20, 20, 20, 100);
+        text("A Journey of Escape", canvasWidth / 2 + 2, canvasHeight * 0.4 + 2);
+        
+        // Subtitle main text
+        fill(themeColors.spirits[0], themeColors.spirits[1], themeColors.spirits[2], 230);
         text("A Journey of Escape", canvasWidth / 2, canvasHeight * 0.4);
         
-        // Instruction
-        fill(255, 200);
-        textSize(18 * gameScaleFactor);
-        text("Use arrow keys or tap left/right side of screen to rotate", canvasWidth / 2, canvasHeight * 0.6);
+        // Instructions with improved readability
+        textFont('Quicksand');
+        textSize(24 * gameScaleFactor);
+        fill(255, 250, 240, 220);
+        text("Use arrow keys or tap left/right to rotate", canvasWidth / 2, canvasHeight * 0.6);
         text("Avoid barriers as you journey through realms", canvasWidth / 2, canvasHeight * 0.65);
         
         // Start button
@@ -1339,13 +1530,56 @@
         }
     }
     
+    // Helper function for gradients
+    function setGradient(x, y, w, h, c1, c2) {
+        noFill();
+        for (let i = y; i <= y + h; i++) {
+            let inter = map(i, y, y + h, 0, 1);
+            let c = lerpColor(c1, c2, inter);
+            stroke(c);
+            line(x, i, x + w, i);
+        }
+    }
+
     function drawStoryScreen() {
         let themeColors = Config.colorThemes[0];
         
-        // Draw animated background (dimmed)
-        background(themeColors.bg[0] * 0.6, themeColors.bg[1] * 0.6, themeColors.bg[2] * 0.6);
+        // Draw animated background with subtle gradient
+        setGradient(0, 0, width, height, 
+                   color(themeColors.bg[0] * 0.5, themeColors.bg[1] * 0.5, themeColors.bg[2] * 0.5), 
+                   color(themeColors.bg[0] * 0.8, themeColors.bg[1] * 0.8, themeColors.bg[2] * 0.8));
         
-        // Draw story content
+        // Draw subtle background elements
+        push();
+        translate(gameOffsetX, gameOffsetY);
+        
+        // Decorative circles
+        noFill();
+        for (let i = 0; i < 3; i++) {
+            stroke(255, 255, 255, 20 + i * 5);
+            strokeWeight(1);
+            ellipse(0, 0, 300 + i * 200, 300 + i * 200);
+        }
+        
+        // Occasional gentle particles
+        if (random() < 0.1) {
+            let angle = random(360);
+            let distance = random(50, 350);
+            addParticle(
+                distance * cos(angle),
+                distance * sin(angle),
+                random(-0.3, 0.3),
+                random(-0.3, 0.3),
+                random(5, 15),
+                [255, 255, 255],
+                random(60, 120)
+            );
+        }
+        
+        updateAndDrawParticles();
+        pop();
+        
+        // Draw story content with improved typography
         push();
         textAlign(CENTER, TOP);
         
@@ -1354,14 +1588,32 @@
             storyFadeIn += 5;
         }
         
-        // Story title
-        fill(255, storyFadeIn);
-        textSize(36 * gameScaleFactor);
+        // Story title with enhanced styling
+        textFont('Mali');
+        textStyle(BOLD);
+        
+        // Title shadow
+        fill(20, 20, 20, storyFadeIn * 0.5);
+        textSize(42 * gameScaleFactor);
+        text("The Curse of Endless Barriers", canvasWidth / 2 + 2, canvasHeight * 0.15 + 2);
+        
+        // Title main text with glow
+        for (let i = 3; i > 0; i--) {
+            let alpha = map(i, 3, 0, 30, storyFadeIn);
+            fill(255, 250, 220, alpha);
+            textSize((42 + i) * gameScaleFactor);
+            text("The Curse of Endless Barriers", canvasWidth / 2, canvasHeight * 0.15);
+        }
+        
+        fill(255, 250, 220, storyFadeIn);
+        textSize(42 * gameScaleFactor);
         text("The Curse of Endless Barriers", canvasWidth / 2, canvasHeight * 0.15);
         
-        // Story content
-        fill(255, 230, 200, storyFadeIn);
-        textSize(18 * gameScaleFactor);
+        // Story content with improved readability
+        textFont('Quicksand');
+        textStyle(NORMAL);
+        fill(255, 245, 225, storyFadeIn);
+        textSize(24 * gameScaleFactor); // Larger, more readable text
         textAlign(LEFT, TOP);
         
         let storyText;
@@ -1421,47 +1673,106 @@
     }
     
     function drawGameOverScreen() {
-        // Semi-transparent overlay
-        fill(0, 0, 0, 180);
-        rect(0, 0, canvasWidth, canvasHeight);
+        // Enhanced game over visual effect
+        // Semi-transparent overlay with gradient
+        noStroke();
+        for (let i = 0; i < canvasHeight; i++) {
+            let alpha = map(i, 0, canvasHeight, 150, 220);
+            fill(0, 0, 0, alpha);
+            rect(0, i, canvasWidth, 1);
+        }
         
         push();
         textAlign(CENTER, CENTER);
         
-        // Game Over text
+        // Game Over text with enhanced styling
+        textFont('Mali');
+        textStyle(BOLD);
+        
+        // Text glow effect
+        for (let i = 4; i > 0; i--) {
+            let alpha = map(i, 4, 0, 40, 120);
+            fill(255, 80, 60, alpha);
+            textSize((54 + i*2) * gameScaleFactor);
+            text("The Barriers Claim Another", canvasWidth / 2, canvasHeight * 0.3);
+        }
+        
+        // Main text
         fill(255, 100, 80);
-        textSize(48 * gameScaleFactor);
+        textSize(54 * gameScaleFactor);
         text("The Barriers Claim Another", canvasWidth / 2, canvasHeight * 0.3);
         
-        // Score display
-        fill(255);
-        textSize(28 * gameScaleFactor);
+        // Score display with enhanced styling
+        textFont('Quicksand');
+        textStyle(BOLD);
+        
+        // Score shadow
+        fill(20, 20, 20, 150);
+        textSize(36 * gameScaleFactor);
+        text(`Your Journey: ${score.toFixed(1)} seconds`, canvasWidth / 2 + 2, canvasHeight * 0.42 + 2);
+        
+        // Score text
+        fill(255, 250, 240);
         text(`Your Journey: ${score.toFixed(1)} seconds`, canvasWidth / 2, canvasHeight * 0.42);
         
-        // High scores
-        textSize(20 * gameScaleFactor);
-        text(`Session Best: ${sessionHighScore.toFixed(1)} seconds`, canvasWidth / 2, canvasHeight * 0.5);
-        text(`All-time Best: ${lifetimeHighScore.toFixed(1)} seconds`, canvasWidth / 2, canvasHeight * 0.56);
+        // High scores with improved styling
+        textStyle(NORMAL);
         
-        // Try again button
-        let buttonY = canvasHeight * 0.7;
-        let buttonWidth = 220 * gameScaleFactor;
-        let buttonHeight = 60 * gameScaleFactor;
-        
-        fill(80, 120, 200);
-        stroke(255, 150);
+        // Draw decorative line
+        stroke(255, 200, 150, 100);
         strokeWeight(2);
-        rect(canvasWidth / 2, buttonY, buttonWidth, buttonHeight, 10);
+        line(canvasWidth/2 - 150 * gameScaleFactor, canvasHeight * 0.48, 
+             canvasWidth/2 + 150 * gameScaleFactor, canvasHeight * 0.48);
         
+        // High score text
+        noStroke();
+        fill(255, 230, 200);
+        textSize(26 * gameScaleFactor);
+        text(`Session Best: ${sessionHighScore.toFixed(1)} seconds`, canvasWidth / 2, canvasHeight * 0.52);
+        text(`All-time Best: ${lifetimeHighScore.toFixed(1)} seconds`, canvasWidth / 2, canvasHeight * 0.58);
+        
+        // Try again button with enhanced styling
+        let buttonY = canvasHeight * 0.7;
+        let buttonWidth = 280 * gameScaleFactor;
+        let buttonHeight = 70 * gameScaleFactor;
+        
+        // Button glow
+        for (let i = 3; i > 0; i--) {
+            let alpha = map(i, 3, 0, 40, 100);
+            fill(100, 180, 255, alpha);
+            noStroke();
+            rect(canvasWidth / 2, buttonY, buttonWidth + i*10, buttonHeight + i*10, 15);
+        }
+        
+        // Main button
+        fill(80, 120, 200);
+        stroke(255, 180);
+        strokeWeight(3);
+        rect(canvasWidth / 2, buttonY, buttonWidth, buttonHeight, 12);
+        
+        // Button text
         fill(255);
         noStroke();
-        textSize(24 * gameScaleFactor);
+        textFont('Mali');
+        textSize(32 * gameScaleFactor);
         text("Journey Again", canvasWidth / 2, buttonY);
         
-        // Return to menu link
-        fill(200);
-        textSize(18 * gameScaleFactor);
-        text("Return to Menu", canvasWidth / 2, canvasHeight * 0.8);
+        // Return to menu link with improved styling
+        textFont('Quicksand');
+        fill(220, 220, 230);
+        textSize(24 * gameScaleFactor);
+        text("Return to Menu", canvasWidth / 2, canvasHeight * 0.82);
+        
+        // Add subtle particles
+        if (random() < 0.2) {
+            let x = random(canvasWidth);
+            let y = random(canvasHeight);
+            let size = random(5, 15) * gameScaleFactor;
+            
+            fill(255, 255, 255, random(20, 80));
+            noStroke();
+            ellipse(x, y, size, size);
+        }
         
         pop();
     }
